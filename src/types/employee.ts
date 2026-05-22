@@ -1,0 +1,59 @@
+export interface Employee {
+  id: number;
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  gender: 'male' | 'female' | 'other' | null;
+  dob: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  country: string;
+  pincode: string | null;
+  department_id: number | null;
+  designation_id: number | null;
+  department: { id: number; name: string } | null;
+  designation: { id: number; title: string } | null;
+  joining_date: string;
+  exit_date: string | null;
+  employment_type: 'full_time' | 'part_time' | 'contract' | 'intern';
+  status: 'active' | 'inactive' | 'terminated';
+  photo: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
+  bank_name: string | null;
+  bank_account_number: string | null;
+  bank_ifsc: string | null;
+  bank_branch: string | null;
+  created_at: string;
+}
+
+export interface StoreEmployeePayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  gender?: string;
+  dob?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+  department_id?: number | null;
+  designation_id?: number | null;
+  joining_date: string;
+  employment_type?: string;
+  status?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relation?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
+}
