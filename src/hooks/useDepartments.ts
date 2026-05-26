@@ -1,73 +1,133 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
+
 import api from '@/lib/api';
-import { Department, StoreDepartmentPayload, UpdateDepartmentPayload } from '@/types/department';
 
-const KEY = 'departments';
+export const useDepartments = (params?: {
+  page?: number;
+  search?: string;
+  status?: string;
+}) => {
 
-export const useDepartments = (params?: { search?: string; status?: string }) => {
-  return useQuery<Department[]>({
-    queryKey: [KEY, params],
-    queryFn: () => api.get('/departments', { params }).then((r) => r.data.data),
-    staleTime: 2 * 60 * 1000,
-  });
-};
+  return useQuery({
 
-export const useDepartment = (id: number) => {
-  return useQuery<Department>({
-    queryKey: [KEY, id],
-    queryFn: () => api.get(`/departments/${id}`).then((r) => r.data.data),
-    enabled: !!id,
+    queryKey: [
+      'departments',
+      params,
+    ],
+
+    queryFn: async () => {
+
+      const response =
+        await api.get(
+          '/v1/departments',
+          {
+            params: {
+              ...params,
+              page:
+                params?.page || 1,
+              per_page: 10,
+            },
+          }
+        );
+
+      return response.data;
+    },
   });
 };
 
 export const useCreateDepartment = () => {
-  const queryClient = useQueryClient();
+
+  const queryClient =
+    useQueryClient();
+
   return useMutation({
-    mutationFn: (data: StoreDepartmentPayload) =>
-      api.post('/departments', data).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [KEY] });
-      toast.success('Department created successfully');
+
+    mutationFn: async (
+      data: any
+    ) => {
+
+      const response =
+        await api.post(
+          '/departments',
+          data
+        );
+
+      return response.data;
     },
-    onError: (error: any) => {
-      const msg = error?.response?.data?.errors
-        ? Object.values(error.response.data.errors).flat()[0]
-        : error?.response?.data?.message || 'Failed to create department';
-      toast.error(msg as string);
+
+    onSuccess: () => {
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'departments',
+        ],
+      });
     },
   });
 };
 
 export const useUpdateDepartment = () => {
-  const queryClient = useQueryClient();
+
+  const queryClient =
+    useQueryClient();
+
   return useMutation({
-    mutationFn: ({ id, ...data }: UpdateDepartmentPayload) =>
-      api.put(`/departments/${id}`, data).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [KEY] });
-      toast.success('Department updated successfully');
+
+    mutationFn: async ({
+      id,
+      ...data
+    }: any) => {
+
+      const response =
+        await api.put(
+          `/departments/${id}`,
+          data
+        );
+
+      return response.data;
     },
-    onError: (error: any) => {
-      const msg = error?.response?.data?.errors
-        ? Object.values(error.response.data.errors).flat()[0]
-        : error?.response?.data?.message || 'Failed to update department';
-      toast.error(msg as string);
+
+    onSuccess: () => {
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'departments',
+        ],
+      });
     },
   });
 };
 
 export const useDeleteDepartment = () => {
-  const queryClient = useQueryClient();
+
+  const queryClient =
+    useQueryClient();
+
   return useMutation({
-    mutationFn: (id: number) =>
-      api.delete(`/departments/${id}`).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [KEY] });
-      toast.success('Department deleted successfully');
+
+    mutationFn: async (
+      id: number
+    ) => {
+
+      const response =
+        await api.delete(
+          `/departments/${id}`
+        );
+
+      return response.data;
     },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || 'Failed to delete department');
+
+    onSuccess: () => {
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          'departments',
+        ],
+      });
     },
   });
 };

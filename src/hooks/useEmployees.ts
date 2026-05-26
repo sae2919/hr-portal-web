@@ -14,7 +14,7 @@ export const useEmployees = (params?: {
   return useQuery<Employee[]>({
     queryKey: [KEY, params],
     queryFn: () =>
-      api.get('/employees', { params }).then((r) => r.data.data),
+      api.get('/v1/employees', { params }).then((r) => r.data.data),
     staleTime: 2 * 60 * 1000,
   });
 };

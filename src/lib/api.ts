@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { useAuthStore } from '@/store/authStore';
 
 const parseData = (data: any) => {
   if (typeof data === 'string') {
@@ -11,7 +12,8 @@ const parseData = (data: any) => {
 };
 
 const api = axios.create({
-  baseURL: `${process.env.NEXT_PUBLIC_API_URL}/v1`,
+  // FIXED: Keep the base URL clean. We will manage versioning prefixes inside the routes definitions cleanly.
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -20,11 +22,10 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('hr_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    // FIXED: Instead of hitting slower local storage lookups, read directly from active store memory state
+    const token = useAuthStore.getState().token;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -39,8 +40,8 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('hr_token');
-        document.cookie = 'hr_token=; path=/; max-age=0';
+        // FIXED: Call the centralized state cleaner instead of loose manual deletions
+        useAuthStore.getState().clearAuth();
         window.location.href = '/login';
       }
     }

@@ -15,7 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Bell, LogOut, User, Settings, Loader2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
-function getPageTitle(pathname: string): string {
+// Modified helper function to parse titles dynamically based on active system roles
+function getPageTitle(pathname: string, role?: string): string {
   const map: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/employees': 'Employees',
@@ -27,10 +28,13 @@ function getPageTitle(pathname: string): string {
     '/recruitment': 'Recruitment',
     '/settings': 'Settings',
   };
+
   for (const key of Object.keys(map)) {
     if (pathname.startsWith(key)) return map[key];
   }
-  return 'HR Portal';
+
+  // If path doesn't explicitly match a sub-module, evaluate the logged-in user role context
+  return role === 'admin' ? 'HR Portal' : 'Employee Portal';
 }
 
 function getInitials(name: string): string {
@@ -52,10 +56,10 @@ export function Header() {
 
       {/* Page Title */}
       <div>
-        <h1 className="text-lg font-semibold text-slate-800">
-          {getPageTitle(pathname)}
+        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+          {getPageTitle(pathname, user?.role)}
         </h1>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-400 mt-0.5">
           {new Date().toLocaleDateString('en-US', {
             weekday: 'long',
             year: 'numeric',

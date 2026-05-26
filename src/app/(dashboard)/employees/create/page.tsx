@@ -19,6 +19,7 @@ const schema = z.object({
   email:           z.string().email('Valid email required'),
   phone:           z.string().optional().or(z.literal('')),
   gender:          z.enum(['male', 'female', 'other']).optional(),
+  blood_group:     z.string().optional().or(z.literal('')),
   dob:             z.string().optional().or(z.literal('')),
   joining_date:    z.string().min(1, 'Joining date is required'),
   employment_type: z.enum(['full_time', 'part_time', 'contract', 'intern']),
@@ -75,7 +76,11 @@ function Field({ label, required, children, error, fullWidth }: {
 export default function CreateEmployeePage() {
   const router = useRouter();
   const { mutate: createEmployee, isPending } = useCreateEmployee();
-  const { data: departments = [] } = useDepartments();
+  const { data: departmentsResponse } = useDepartments();
+
+const departments = Array.isArray(departmentsResponse?.data)
+  ? departmentsResponse.data
+  : [];
   const { data: designations = [] } = useDesignations();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -152,6 +157,33 @@ export default function CreateEmployeePage() {
           <Field label="Date of Birth">
             <Input type="date" {...register('dob')} className="h-10" />
           </Field>
+          {/* Blood Group */}
+<div>
+  <label className="block text-sm font-medium text-slate-700 mb-2">
+    Blood Group
+  </label>
+
+  <select
+    {...register('blood_group')}
+    className="w-full rounded-xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  >
+    <option value="">Select blood group</option>
+
+    <option value="A+">A+</option>
+    <option value="A-">A-</option>
+
+    <option value="B+">B+</option>
+    <option value="B-">B-</option>
+
+    <option value="AB+">AB+</option>
+    <option value="AB-">AB-</option>
+
+    <option value="O+">O+</option>
+    <option value="O-">O-</option>
+
+    <option value="Other">Other</option>
+  </select>
+</div>
         </Section>
 
         {/* Job Info */}

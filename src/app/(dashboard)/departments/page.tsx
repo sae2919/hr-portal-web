@@ -52,10 +52,24 @@ function DepartmentModal({ open, onClose, department, departments }: {
       status: data.status,
       parent_id: data.parent_id ?? null,
     };
+
     if (isEdit && department) {
-      update({ id: department.id, ...payload }, { onSuccess: () => { onClose(); reset(); } });
+      update(
+        { id: department.id, ...payload },
+        {
+          onSuccess: () => {
+            onClose();
+            reset();
+          },
+        }
+      );
     } else {
-      create(payload, { onSuccess: () => { onClose(); reset(); } });
+      create(payload, {
+        onSuccess: () => {
+          onClose();
+          reset();
+        },
+      });
     }
   };
 
@@ -64,6 +78,7 @@ function DepartmentModal({ open, onClose, department, departments }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -71,49 +86,55 @@ function DepartmentModal({ open, onClose, department, departments }: {
               <Building2 className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-800">{isEdit ? 'Edit Department' : 'New Department'}</h2>
-              <p className="text-xs text-slate-400">{isEdit ? 'Update department details' : 'Add a new department'}</p>
+              <h2 className="text-lg font-semibold text-slate-800">
+                {isEdit ? 'Edit Department' : 'New Department'}
+              </h2>
+              <p className="text-xs text-slate-400">
+                {isEdit ? 'Update department details' : 'Add a new department'}
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400"
+          >
             <X size={16} />
           </button>
         </div>
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Department Name <span className="text-red-500">*</span></Label>
+            <Label className="text-sm font-medium text-slate-700">
+              Department Name <span className="text-red-500">*</span>
+            </Label>
             <Input placeholder="e.g. Engineering" {...register('name')} className="h-10" />
             {errors.name && <p className="text-red-500 text-xs">{errors.name.message}</p>}
           </div>
+
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Code <span className="text-slate-400 font-normal">(optional)</span></Label>
+            <Label className="text-sm font-medium text-slate-700">
+              Code <span className="text-slate-400 font-normal">(optional)</span>
+            </Label>
             <Input placeholder="e.g. ENG" {...register('code')} className="h-10" />
           </div>
+
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Description <span className="text-slate-400 font-normal">(optional)</span></Label>
-            <textarea {...register('description')} rows={2} placeholder="Brief description..." className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+            <Label className="text-sm font-medium text-slate-700">Description</Label>
+            <textarea
+              placeholder="Department description"
+              {...register('description')}
+              className="w-full min-h-[80px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Parent Department <span className="text-slate-400 font-normal">(optional)</span></Label>
-            <select {...register('parent_id', { setValueAs: (v) => v === '' ? null : Number(v) })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">None (Top Level)</option>
-              {departments.filter((d) => d.id !== department?.id).map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Status</Label>
-            <select {...register('status')} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={creating || updating} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white">
-              {(creating || updating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEdit ? 'Update' : 'Create'}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={creating || updating} className="bg-blue-600 hover:bg-blue-700">
+              {(creating || updating) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {isEdit ? 'Update Department' : 'Create Department'}
             </Button>
           </div>
         </form>
@@ -122,138 +143,202 @@ function DepartmentModal({ open, onClose, department, departments }: {
   );
 }
 
-function DeleteModal({ department, onClose }: { department: Department | null; onClose: () => void }) {
-  const { mutate: deleteDept, isPending } = useDeleteDepartment();
-  if (!department) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
-        <div className="text-center">
-          <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Trash2 className="w-6 h-6 text-red-500" />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-800">Delete Department</h3>
-          <p className="text-slate-500 text-sm mt-2">Are you sure you want to delete <span className="font-medium text-slate-700">{department.name}</span>? This cannot be undone.</p>
-          {department.employee_count > 0 && (
-            <p className="text-amber-600 text-xs mt-2 bg-amber-50 px-3 py-2 rounded-lg">This department has {department.employee_count} employee(s). Reassign them first.</p>
-          )}
-        </div>
-        <div className="flex gap-3 mt-6">
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-          <Button onClick={() => deleteDept(department.id, { onSuccess: onClose })} disabled={isPending || department.employee_count > 0} className="flex-1 bg-red-500 hover:bg-red-600 text-white">
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Delete
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function DepartmentsPage() {
-  const [search, setSearch]         = useState('');
-  const [modalOpen, setModalOpen]   = useState(false);
-  const [editDept, setEditDept]     = useState<Department | null>(null);
-  const [deleteDept, setDeleteDept] = useState<Department | null>(null);
-  const [mounted, setMounted]       = useState(false);
-  const { hasPermission }           = useAuthStore();
+  const { user } = useAuthStore();
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
-  useEffect(() => setMounted(true), []);
+  const { data, isLoading } = useDepartments({ search, page });
+  const { mutate: deleteDepartment } = useDeleteDepartment();
 
-  const { data: departments = [], isLoading } = useDepartments({ search });
+  const departments = data?.data || [];
 
-  const canCreate = mounted && hasPermission('create departments');
-  const canEdit   = mounted && hasPermission('edit departments');
-  const canDelete = mounted && hasPermission('delete departments');
+  // ── pagination meta data normalization ──
+  const total    = data?.meta?.total ?? 0;
+  const lastPage = data?.meta?.last_page ?? 1;
+  const from     = data?.meta?.from ?? 0;
+  const to       = data?.meta?.to ?? 0;
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    setPage(1);
+  };
+
+  const openCreateModal = () => {
+    setSelectedDepartment(null);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (department: Department) => {
+    setSelectedDepartment(department);
+    setModalOpen(true);
+  };
+
+  const handleDelete = (id: number, name: string) => {
+    if (window.confirm(`Are you sure you want to delete ${name}?`)) {
+      deleteDepartment(id);
+    }
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="p-6 space-y-6">
+      {/* Header Panel */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Departments</h2>
-          <p className="text-sm text-slate-400">{departments.length} department{departments.length !== 1 ? 's' : ''} total</p>
+          <h1 className="text-3xl font-bold text-slate-800">Departments</h1>
+          <p className="text-slate-400 mt-1">{total} departments total</p>
         </div>
-        {canCreate && (
-          <Button onClick={() => setModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white gap-2">
-            <Plus size={16} />Add Department
-          </Button>
+        <Button onClick={openCreateModal} className="bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Department
+        </Button>
+      </div>
+
+      {/* Search Input Filter Container */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Search departments..."
+            value={search}
+            onChange={handleSearchChange}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
+      {/* Table Display Matrix */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 select-none">
+              <tr>
+                <th className="text-left px-6 py-4 text-sm font-semibold text-slate-600">Department</th>
+                <th className="text-left px-6 py-4 text-sm font-semibold text-slate-600">Code</th>
+                <th className="text-left px-6 py-4 text-sm font-semibold text-slate-600">Parent</th>
+                <th className="text-left px-6 py-4 text-sm font-semibold text-slate-600">Employees</th>
+                <th className="text-left px-6 py-4 text-sm font-semibold text-slate-600">Status</th>
+                <th className="text-right px-6 py-4 text-sm font-semibold text-slate-600">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" />
+                  </td>
+                </tr>
+              ) : departments.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
+                    No departments found
+                  </td>
+                </tr>
+              ) : (
+                departments.map((department) => (
+                  <tr key={department.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                          <Building2 className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-800">{department.name}</p>
+                          <p className="text-xs text-slate-400 max-w-xs truncate">{department.description || 'No description'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge variant="secondary" className="shadow-none rounded-md font-mono text-xs">{department.code || '—'}</Badge>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500">
+                      {department.parent?.name || '-'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <Users className="w-4 h-4" />
+                        <span>{department.employees_count || 0}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge
+                        variant="outline"
+                        className={
+                          department.status === 'active'
+                            ? 'bg-green-50 text-green-700 border-green-200 font-normal rounded-md'
+                            : 'bg-red-50 text-red-700 border-red-200 font-normal rounded-md'
+                        }
+                      >
+                        {department.status}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditModal(department)}
+                          className="w-8 h-8 p-0 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(department.id, department.name)}
+                          className="w-8 h-8 p-0 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── UNIFIED RECRUITMENT STYLE PAGINATION FOOTER ── */}
+        {!isLoading && total > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50 select-none">
+            <p className="text-xs text-slate-400">
+              Showing <span className="font-medium text-slate-600">{from}–{to}</span> of <span className="font-medium text-slate-600">{total}</span> pipeline files
+            </p>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(p - 1, 1))}
+                disabled={page === 1}
+                className="h-8 text-xs font-normal px-3 border-slate-200 rounded-lg disabled:opacity-40 shadow-none"
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(p + 1, lastPage))}
+                disabled={page === lastPage}
+                className="h-8 text-xs font-normal px-3 border-slate-200 rounded-lg disabled:opacity-40 shadow-none"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         )}
       </div>
-      <div className="relative max-w-sm">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <Input placeholder="Search departments..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-10" />
-      </div>
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="text-left px-5 py-3.5 font-medium text-slate-500">Department</th>
-              <th className="text-left px-5 py-3.5 font-medium text-slate-500">Code</th>
-              <th className="text-left px-5 py-3.5 font-medium text-slate-500">Parent</th>
-              <th className="text-left px-5 py-3.5 font-medium text-slate-500">Employees</th>
-              <th className="text-left px-5 py-3.5 font-medium text-slate-500">Status</th>
-              {(canEdit || canDelete) && <th className="text-right px-5 py-3.5 font-medium text-slate-500">Actions</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {isLoading ? (
-              <tr><td colSpan={6} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin mx-auto text-slate-400" /></td></tr>
-            ) : departments.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-12">
-                <Building2 className="w-10 h-10 mx-auto text-slate-200 mb-3" />
-                <p className="text-slate-400 text-sm">No departments found</p>
-              </td></tr>
-            ) : departments.map((dept) => (
-              <tr key={dept.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-slate-700">{dept.name}</p>
-                      {dept.description && <p className="text-xs text-slate-400 truncate max-w-xs">{dept.description}</p>}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-5 py-4">
-                  {dept.code ? <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">{dept.code}</span> : <span className="text-slate-300">-</span>}
-                </td>
-                <td className="px-5 py-4 text-slate-500">{dept.parent?.name ?? <span className="text-slate-300">-</span>}</td>
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-1.5 text-slate-600">
-                    <Users size={13} className="text-slate-400" /><span>{dept.employee_count}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-4">
-                  <Badge className={dept.status === 'active' ? 'bg-green-50 text-green-700 hover:bg-green-50 border-green-100' : 'bg-slate-100 text-slate-500'}>
-                    {dept.status}
-                  </Badge>
-                </td>
-                {(canEdit || canDelete) && (
-                  <td className="px-5 py-4">
-                    <div className="flex items-center justify-end gap-1">
-                      {canEdit && (
-                        <button onClick={() => { setEditDept(dept); setModalOpen(true); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors">
-                          <Pencil size={14} />
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button onClick={() => setDeleteDept(dept)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <DepartmentModal open={modalOpen} onClose={() => { setModalOpen(false); setEditDept(null); }} department={editDept} departments={departments} />
-      <DeleteModal department={deleteDept} onClose={() => setDeleteDept(null)} />
+
+      <DepartmentModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        department={selectedDepartment}
+        departments={departments}
+      />
     </div>
   );
 }

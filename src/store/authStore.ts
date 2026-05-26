@@ -25,10 +25,14 @@ export const useAuthStore = create<AuthState>()(
           console.error('Invalid token:', token);
           return;
         }
+
+        // 1. Save standard string variant to local client cache storage
         localStorage.setItem('hr_token', token);
-        document.cookie = `hr_token=${token}; path=/; max-age=${
-          60 * 60 * 24 * 7
-        }; SameSite=Lax`;
+        
+        // 2. FIXED: Wrap token in encodeURIComponent to prevent special token strings (like "1|xyz") from breaking cookie storage parsers
+        const maxAge = 60 * 60 * 24 * 7; // 7 Days
+        document.cookie = `hr_token=${encodeURIComponent(token)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+        
         set({ user, token, isAuthenticated: true });
         console.log('Auth set for:', user.email);
       },
@@ -38,21 +42,33 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearAuth: () => {
+        // 3. Clean local client reference tracks out completely
         localStorage.removeItem('hr_token');
-        document.cookie = 'hr_token=; path=/; max-age=0';
+        
+        // 4. FIXED: Clean browser cookies context safely using identical string pathways
+        document.cookie = 'hr_token=; path=/; max-age=0; SameSite=Lax';
+        
         set({ user: null, token: null, isAuthenticated: false });
       },
 
       hasPermission: (permission) => {
-        const user = get().user;
-        if (!user) return false;
-        return user.permissions.includes(permission);
+        const currentUser = get().user;
+        if (!currentUser) return false;
+        
+        // Check for permission arrays structural fallbacks safely
+        const permissions = currentUser.permissions || currentUser.data?.permissions || [];
+        return permissions.includes(permission);
       },
 
       hasRole: (role) => {
-        const user = get().user;
-        if (!user) return false;
-        return user.roles.includes(role);
+        const currentUser = get().user;
+        if (!currentUser) return false;
+        
+        // Handle array verification properties safely whether reading direct key or relation resource mapping strings
+        const roles = currentUser.roles || [];
+        const singleRole = currentUser.role ? [currentUser.role.toLowerCase()] : [];
+        
+        return roles.includes(role) || singleRole.includes(role.toLowerCase());
       },
     }),
     {

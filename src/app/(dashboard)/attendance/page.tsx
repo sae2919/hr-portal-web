@@ -1,217 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAttendance, useSaveAttendance, useUpdateAttendance, useDeleteAttendance, useMonthlyReport } from '@/hooks/useAttendance';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useWorksheet, useSaveBulkAttendance, useMonthlyReport, WorksheetItem } from '@/hooks/useAttendance';
 import { useDepartments } from '@/hooks/useDepartments';
-import { Attendance, StoreAttendancePayload } from '@/types/attendance';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
-  Plus, Pencil, Trash2, Loader2, Clock,
-  X, ChevronLeft, ChevronRight, BarChart3,
+  Loader2, Clock, ChevronLeft, ChevronRight, BarChart3,
+  CheckSquare, Square, Save, Check, Plane,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
-// ── Status config ─────────────────────────────────────────────────
-const statusConfig: Record<string, { label: string; color: string }> = {
-  present:  { label: 'Present',  color: 'bg-green-50 text-green-700 border-green-100' },
-  absent:   { label: 'Absent',   color: 'bg-red-50 text-red-600 border-red-100' },
-  late:     { label: 'Late',     color: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
-  half_day: { label: 'Half Day', color: 'bg-orange-50 text-orange-700 border-orange-100' },
-  holiday:  { label: 'Holiday',  color: 'bg-blue-50 text-blue-700 border-blue-100' },
-};
-
-// ── Attendance Form Modal ─────────────────────────────────────────
-const schema = z.object({
-  employee_id:    z.number({ required_error: 'Select employee' }),
-  date:           z.string().min(1, 'Date is required'),
-  check_in:       z.string().optional().or(z.literal('')),
-  check_out:      z.string().optional().or(z.literal('')),
-  status:         z.enum(['present', 'absent', 'late', 'half_day', 'holiday']),
-  overtime_hours: z.number().min(0).max(12).optional(),
-  note:           z.string().optional().or(z.literal('')),
-});
-
-type FormData = z.infer<typeof schema>;
-
-function AttendanceModal({ open, onClose, attendance }: {
-  open: boolean;
-  onClose: () => void;
-  attendance?: Attendance | null;
-}) {
-  const isEdit = !!attendance;
-  const { mutate: save,   isPending: saving   } = useSaveAttendance();
-  const { mutate: update, isPending: updating } = useUpdateAttendance();
-  const { data: employees = [] } = useEmployees();
-
-  const today = new Date().toISOString().split('T')[0];
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      employee_id:    attendance?.employee_id ?? undefined,
-      date:           attendance?.date        ?? today,
-      check_in:       attendance?.check_in    ?? '09:00',
-      check_out:      attendance?.check_out   ?? '18:00',
-      status:         attendance?.status      ?? 'present',
-      overtime_hours: attendance?.overtime_hours ?? 0,
-      note:           attendance?.note        ?? '',
-    },
-  });
-
-  const onSubmit = (data: FormData) => {
-    const payload: StoreAttendancePayload = {
-      employee_id:    data.employee_id,
-      date:           data.date,
-      check_in:       data.check_in || undefined,
-      check_out:      data.check_out || undefined,
-      status:         data.status,
-      overtime_hours: data.overtime_hours ?? 0,
-      note:           data.note || undefined,
-    };
-
-    if (isEdit && attendance) {
-      update({ id: attendance.id, ...payload }, {
-        onSuccess: () => { onClose(); reset(); },
-      });
-    } else {
-      save(payload, {
-        onSuccess: () => { onClose(); reset(); },
-      });
-    }
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-              <Clock className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-800">
-                {isEdit ? 'Edit Attendance' : 'Mark Attendance'}
-              </h2>
-              <p className="text-xs text-slate-400">
-                {isEdit ? 'Update record' : 'Add attendance record'}
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
-            <X size={16} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {!isEdit && (
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-slate-700">
-                Employee <span className="text-red-500">*</span>
-              </Label>
-              <select
-                {...register('employee_id', { valueAsNumber: true })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="">Select employee</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.full_name} ({e.employee_code})
-                  </option>
-                ))}
-              </select>
-              {errors.employee_id && (
-                <p className="text-red-500 text-xs">{errors.employee_id.message}</p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">
-              Date <span className="text-red-500">*</span>
-            </Label>
-            <Input type="date" {...register('date')} className="h-10" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-slate-700">Check In</Label>
-              <Input type="time" {...register('check_in')} className="h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-slate-700">Check Out</Label>
-              <Input type="time" {...register('check_out')} className="h-10" />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Status</Label>
-            <select
-              {...register('status')}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="present">Present</option>
-              <option value="absent">Absent</option>
-              <option value="late">Late</option>
-              <option value="half_day">Half Day</option>
-              <option value="holiday">Holiday</option>
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Overtime Hours</Label>
-            <Input
-              type="number"
-              step="0.5"
-              min="0"
-              max="12"
-              {...register('overtime_hours', { valueAsNumber: true })}
-              className="h-10"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">Note</Label>
-            <textarea
-              {...register('note')}
-              rows={2}
-              placeholder="Optional note..."
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving || updating}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white"
-            >
-              {(saving || updating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEdit ? 'Update' : 'Save'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+// ── Status Configurations ─────────────────────────────────────────
+const statusOptions = [
+  { value: 'present',  label: 'Present',  color: 'bg-green-50 text-green-700 border-green-100' },
+  { value: 'absent',   label: 'Absent',   color: 'bg-red-50 text-red-600 border-red-100' },
+  { value: 'late',     label: 'Late',     color: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
+  { value: 'half_day', label: 'Half Day', color: 'bg-orange-50 text-orange-700 border-orange-100' },
+  { value: 'holiday',  label: 'Holiday',  color: 'bg-blue-50 text-blue-700 border-blue-100' },
+];
 
 // ── Monthly Report Tab ────────────────────────────────────────────
-function MonthlyReportTab({ month, year }: { month: number; year: number }) {
-  const { data, isLoading } = useMonthlyReport(month, year);
-
+function MonthlyReportTab({
+  month,
+  year,
+  employeeId,
+  isAdmin,
+}: {
+  month: number;
+  year: number;
+  employeeId?: number;
+  isAdmin: boolean;
+}) {
+  const { data, isLoading } = useMonthlyReport(month, year, employeeId);
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
 
   return (
@@ -224,8 +46,13 @@ function MonthlyReportTab({ month, year }: { month: number; year: number }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-100 bg-slate-50">
-            <th className="text-left px-5 py-3 font-medium text-slate-500">Employee</th>
-            <th className="text-left px-5 py-3 font-medium text-slate-500">Department</th>
+            {/* Hide Employee/Department columns for non-admins — they only see themselves */}
+            {isAdmin && (
+              <>
+                <th className="text-left px-5 py-3 font-medium text-slate-500">Employee</th>
+                <th className="text-left px-5 py-3 font-medium text-slate-500">Department</th>
+              </>
+            )}
             <th className="text-center px-4 py-3 font-medium text-green-600">Present</th>
             <th className="text-center px-4 py-3 font-medium text-red-500">Absent</th>
             <th className="text-center px-4 py-3 font-medium text-yellow-600">Late</th>
@@ -236,18 +63,22 @@ function MonthlyReportTab({ month, year }: { month: number; year: number }) {
         <tbody className="divide-y divide-slate-50">
           {isLoading ? (
             <tr>
-              <td colSpan={7} className="text-center py-10">
+              <td colSpan={isAdmin ? 7 : 5} className="text-center py-10">
                 <Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" />
               </td>
             </tr>
           ) : (
             data?.data.map((row) => (
               <tr key={row.employee_id} className="hover:bg-slate-50">
-                <td className="px-5 py-3">
-                  <p className="font-medium text-slate-700">{row.full_name}</p>
-                  <p className="text-xs text-slate-400">{row.employee_code}</p>
-                </td>
-                <td className="px-5 py-3 text-slate-500 text-sm">{row.department ?? '—'}</td>
+                {isAdmin && (
+                  <>
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-slate-700">{row.full_name}</p>
+                      <p className="text-xs text-slate-400">{row.employee_code}</p>
+                    </td>
+                    <td className="px-5 py-3 text-slate-500">{row.department ?? '—'}</td>
+                  </>
+                )}
                 <td className="px-4 py-3 text-center">
                   <span className="text-green-600 font-semibold">{row.present}</span>
                 </td>
@@ -280,49 +111,117 @@ export default function AttendancePage() {
 
   const [tab, setTab]               = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setDate]     = useState(today);
+  const [page, setPage]             = useState(1);
   const [month, setMonth]           = useState(nowMonth);
   const [year, setYear]             = useState(nowYear);
   const [filterDept, setFilterDept] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [modalOpen, setModalOpen]   = useState(false);
-  const [editRecord, setEditRecord] = useState<Attendance | null>(null);
-  const [mounted, setMounted]       = useState(false);
-  const { hasPermission }           = useAuthStore();
+
+  // Bulk edit states (admin only)
+  const [globalIn, setGlobalIn]           = useState('09:00');
+  const [globalOut, setGlobalOut]         = useState('18:00');
+  const [globalStatus, setGlobalStatus]   = useState('present');
+  const [worksheetData, setWorksheetData] = useState<WorksheetItem[]>([]);
+  const [mounted, setMounted]             = useState(false);
+
+  const { hasPermission, user } = useAuthStore();
+  const { data: departmentsResponse }         = useDepartments();
+  const { mutate: saveBulk, isPending: isSavingBulk } = useSaveBulkAttendance();
 
   useEffect(() => setMounted(true), []);
 
   const canManage = mounted && hasPermission('manage attendance');
+  const isAdmin   = mounted && (hasPermission('manage attendance') || hasPermission('view all attendance'));
 
-  const { data: records = [], isLoading } = useAttendance({
-    date:          tab === 'daily' ? selectedDate : undefined,
-    month:         tab === 'monthly' ? month : undefined,
-    year:          tab === 'monthly' ? year : undefined,
-    status:        filterStatus || undefined,
-    department_id: filterDept ? Number(filterDept) : undefined,
+  const departments = Array.isArray(departmentsResponse?.data) ? departmentsResponse.data : [];
+
+  // Non-admins are scoped to their own employee_id
+  const scopedEmployeeId = isAdmin ? undefined : user?.employee_id;
+
+  const { data: backendWorksheet, isLoading: isWorksheetLoading } = useWorksheet({
+    date:        selectedDate,
+    page,
+    per_page:    10,
+    employee_id: scopedEmployeeId,   // ← key change: scope to self for employees
   });
 
-  const { data: departments = [] } = useDepartments();
-  const { mutate: deleteRecord } = useDeleteAttendance();
+  // Sync backend data into local mutable state
+  useEffect(() => {
+    if (backendWorksheet?.data) {
+      setWorksheetData(backendWorksheet.data.map((item) => ({ ...item, selected: false })));
+    }
+  }, [backendWorksheet]);
 
+  // Individual row change
+  const handleRowChange = (index: number, key: keyof WorksheetItem, value: any) => {
+    setWorksheetData((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, [key]: value } : row))
+    );
+  };
+
+  // Select all (skip leave rows)
+  const toggleSelectAll = (checked: boolean) => {
+    setWorksheetData((prev) =>
+      prev.map((row) => {
+        if (row.note?.includes('On Approved Leave')) return row;
+        return { ...row, selected: checked };
+      })
+    );
+  };
+
+  const activeRows      = worksheetData.filter((r) => !r.note?.includes('On Approved Leave'));
+  const isAllSelected   = activeRows.length > 0 && activeRows.every((r) => r.selected);
+  const selectedCount   = worksheetData.filter((r) => r.selected).length;
+
+  // Apply global time/status to selected rows
+  const applyGlobalTimeModifications = () => {
+    setWorksheetData((prev) =>
+      prev.map((row) => {
+        if (row.selected && !row.note?.includes('On Approved Leave')) {
+          return {
+            ...row,
+            check_in:       globalStatus === 'absent' ? '' : globalIn,
+            check_out:      globalStatus === 'absent' ? '' : globalOut,
+            overtime_hours: globalStatus === 'absent' ? 0 : row.overtime_hours,
+            status:         globalStatus as any,
+          };
+        }
+        return row;
+      })
+    );
+  };
+
+  // Save entire sheet
+  const handleBulkSavePayload = () => {
+    const cleanRecords = worksheetData.map(
+      ({ employee_id, check_in, check_out, status, overtime_hours, note }) => ({
+        employee_id,
+        check_in:       status === 'absent' ? '' : check_in,
+        check_out:      status === 'absent' ? '' : check_out,
+        status,
+        overtime_hours: status === 'absent' ? 0 : overtime_hours,
+        note,
+      })
+    );
+    saveBulk({ date: selectedDate, records: cleanRecords });
+  };
+
+  // Month nav
   const prevMonth = () => {
-    if (month === 1) { setMonth(12); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
+    if (month === 1) { setMonth(12); setYear((y) => y - 1); }
+    else setMonth((m) => m - 1);
   };
-
   const nextMonth = () => {
-    if (month === 12) { setMonth(1); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
+    if (month === 12) { setMonth(1); setYear((y) => y + 1); }
+    else setMonth((m) => m + 1);
   };
 
-  const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+  // Department filter (client-side, for admins only)
+  const filteredWorksheet = worksheetData.filter(
+    (row) => !filterDept || row.department === departments.find((d) => d.id === Number(filterDept))?.name
+  );
 
-  // Stats for daily view
-  const stats = {
-    present:  records.filter(r => r.status === 'present').length,
-    absent:   records.filter(r => r.status === 'absent').length,
-    late:     records.filter(r => r.status === 'late').length,
-    half_day: records.filter(r => r.status === 'half_day').length,
-  };
+  // Column count helper
+  const colSpan = isAdmin ? 8 : 6;
 
   return (
     <div className="space-y-5">
@@ -331,16 +230,10 @@ export default function AttendancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Attendance</h2>
-          <p className="text-sm text-slate-400">Track employee attendance</p>
+          <p className="text-sm text-slate-400">
+            {isAdmin ? 'Direct tabular row-management sheet layout' : 'Your personal attendance record'}
+          </p>
         </div>
-        {canManage && (
-          <Button
-            onClick={() => { setEditRecord(null); setModalOpen(true); }}
-            className="bg-blue-600 hover:bg-blue-500 text-white gap-2"
-          >
-            <Plus size={16} /> Mark Attendance
-          </Button>
-        )}
       </div>
 
       {/* Tabs */}
@@ -348,9 +241,7 @@ export default function AttendancePage() {
         <button
           onClick={() => setTab('daily')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            tab === 'daily'
-              ? 'bg-white text-slate-800 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'daily' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Daily View
@@ -358,9 +249,7 @@ export default function AttendancePage() {
         <button
           onClick={() => setTab('monthly')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-            tab === 'monthly'
-              ? 'bg-white text-slate-800 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'monthly' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           <BarChart3 size={14} /> Monthly Report
@@ -369,142 +258,286 @@ export default function AttendancePage() {
 
       {tab === 'daily' ? (
         <>
-          {/* Daily Filters */}
-          <div className="flex gap-3 flex-wrap items-center">
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-10 w-44"
-            />
-            <select
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 focus:outline-none"
-            >
-              <option value="">All Departments</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 focus:outline-none"
-            >
-              <option value="">All Status</option>
-              <option value="present">Present</option>
-              <option value="absent">Absent</option>
-              <option value="late">Late</option>
-              <option value="half_day">Half Day</option>
-              <option value="holiday">Holiday</option>
-            </select>
-          </div>
+          {/* Filters Bar */}
+          <div className="flex gap-3 flex-wrap items-center bg-white p-4 rounded-xl border border-slate-100 shadow-sm justify-between">
+            <div className="flex gap-3 flex-wrap items-center">
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => { setDate(e.target.value); setPage(1); }}
+                className="h-10 w-44"
+              />
+              {/* Department filter — admins only */}
+              {isAdmin && (
+                <select
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 focus:outline-none bg-transparent"
+                >
+                  <option value="">All Departments</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Present',  count: stats.present,  color: 'text-green-600',  bg: 'bg-green-50' },
-              { label: 'Absent',   count: stats.absent,   color: 'text-red-500',    bg: 'bg-red-50' },
-              { label: 'Late',     count: stats.late,     color: 'text-yellow-600', bg: 'bg-yellow-50' },
-              { label: 'Half Day', count: stats.half_day, color: 'text-orange-600', bg: 'bg-orange-50' },
-            ].map((s) => (
-              <div key={s.label} className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-                <p className="text-xs text-slate-500">{s.label}</p>
-                <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.count}</p>
+            {/* Bulk edit toolbar — admins only */}
+            {canManage && selectedCount > 0 && (
+              <div className="flex items-center gap-2 bg-blue-50/60 p-1.5 rounded-lg border border-blue-100 text-xs text-blue-800 animate-in fade-in duration-200">
+                <span className="font-medium pl-1">{selectedCount} Selected:</span>
+                <Input
+                  type="time"
+                  disabled={globalStatus === 'absent'}
+                  value={globalStatus === 'absent' ? '' : globalIn}
+                  onChange={(e) => setGlobalIn(e.target.value)}
+                  className="h-7 w-24 px-1 bg-white"
+                />
+                <Input
+                  type="time"
+                  disabled={globalStatus === 'absent'}
+                  value={globalStatus === 'absent' ? '' : globalOut}
+                  onChange={(e) => setGlobalOut(e.target.value)}
+                  className="h-7 w-24 px-1 bg-white"
+                />
+                <select
+                  value={globalStatus}
+                  onChange={(e) => setGlobalStatus(e.target.value)}
+                  className="border border-slate-200 rounded px-1.5 h-7 text-xs bg-white"
+                >
+                  {statusOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={applyGlobalTimeModifications}
+                  className="bg-blue-600 hover:bg-blue-500 h-7 text-white text-xs px-2.5"
+                >
+                  Apply All
+                </Button>
               </div>
-            ))}
+            )}
+
+            {canManage && (
+              <Button
+                onClick={handleBulkSavePayload}
+                disabled={isSavingBulk}
+                className="bg-green-600 hover:bg-green-500 text-white gap-2 ml-auto h-10 shadow-sm"
+              >
+                {isSavingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />}
+                Save Entire Sheet
+              </Button>
+            )}
           </div>
 
-          {/* Daily Table */}
+          {/* Table */}
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Employee</th>
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Department</th>
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Check In</th>
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Check Out</th>
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Hours</th>
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Status</th>
+                <tr className="border-b border-slate-100 bg-slate-50/70 select-none">
+                  {/* Checkbox col — admins only */}
                   {canManage && (
-                    <th className="text-right px-5 py-3.5 font-medium text-slate-500">Actions</th>
+                    <th className="px-5 py-3.5 w-12 text-left">
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectAll(!isAllSelected)}
+                        className="text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {isAllSelected
+                          ? <CheckSquare size={18} className="text-blue-600" />
+                          : <Square size={18} />}
+                      </button>
+                    </th>
                   )}
+                  {/* Employee / Department cols — admins only */}
+                  {isAdmin && (
+                    <>
+                      <th className="text-left px-5 py-3.5 font-medium text-slate-500">Employee</th>
+                      <th className="text-left px-5 py-3.5 font-medium text-slate-500">Department</th>
+                    </>
+                  )}
+                  <th className="text-left px-5 py-3.5 font-medium text-slate-500 w-36">Check In</th>
+                  <th className="text-left px-5 py-3.5 font-medium text-slate-500 w-36">Check Out</th>
+                  <th className="text-left px-5 py-3.5 font-medium text-slate-500 w-32">OT Hours</th>
+                  <th className="text-left px-5 py-3.5 font-medium text-slate-500 w-40">Status</th>
+                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Verification</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-50">
-                {isLoading ? (
+                {isWorksheetLoading ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12">
+                    <td colSpan={colSpan} className="text-center py-12">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto text-slate-400" />
                     </td>
                   </tr>
-                ) : records.length === 0 ? (
+                ) : filteredWorksheet.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12">
-                      <Clock className="w-10 h-10 mx-auto text-slate-200 mb-3" />
-                      <p className="text-slate-400 text-sm">No attendance records for this date</p>
+                    <td colSpan={colSpan} className="text-center py-12">
+                      <Clock className="w-10 h-10 mx-auto text-slate-200 mb-2" />
+                      <p className="text-slate-400 text-sm">No attendance record found</p>
                     </td>
                   </tr>
                 ) : (
-                  records.map((record) => (
-                    <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-4">
-                        <p className="font-medium text-slate-700">{record.employee?.full_name}</p>
-                        <p className="text-xs text-slate-400">{record.employee?.employee_code}</p>
-                      </td>
-                      <td className="px-5 py-4 text-slate-500 text-sm">
-                        {record.employee?.department ?? '—'}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="text-slate-700 font-mono text-xs">
-                          {record.check_in ?? '—'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="text-slate-700 font-mono text-xs">
-                          {record.check_out ?? '—'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="text-slate-600 font-mono text-xs">
-                          {record.worked_hours ?? '—'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <Badge className={statusConfig[record.status]?.color ?? ''}>
-                          {statusConfig[record.status]?.label ?? record.status}
-                        </Badge>
-                      </td>
-                      {canManage && (
-                        <td className="px-5 py-4">
-                          <div className="flex items-center justify-end gap-1">
+                  filteredWorksheet.map((row, index) => {
+                    const isOnLeave = row.note?.includes('On Approved Leave');
+
+                    return (
+                      <tr
+                        key={row.employee_id}
+                        className={`transition-colors ${
+                          isOnLeave
+                            ? 'bg-slate-50/40 text-slate-400 select-none'
+                            : row.selected
+                            ? 'bg-blue-50/20'
+                            : 'hover:bg-slate-50/50'
+                        }`}
+                      >
+                        {/* Checkbox — admin only */}
+                        {canManage && (
+                          <td className="px-5 py-3.5">
                             <button
-                              onClick={() => { setEditRecord(record); setModalOpen(true); }}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
+                              type="button"
+                              disabled={isOnLeave}
+                              onClick={() => handleRowChange(index, 'selected', !row.selected)}
+                              className={`text-slate-400 transition-colors ${
+                                isOnLeave ? 'opacity-20 cursor-not-allowed' : 'hover:text-slate-600'
+                              }`}
                             >
-                              <Pencil size={14} />
+                              {row.selected
+                                ? <CheckSquare size={18} className="text-blue-600" />
+                                : <Square size={18} />}
                             </button>
-                            <button
-                              onClick={() => deleteRecord(record.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          </td>
+                        )}
+
+                        {/* Employee / Department — admin only */}
+                        {isAdmin && (
+                          <>
+                            <td className="px-5 py-3.5">
+                              <p className={`font-medium ${isOnLeave ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                {row.name}
+                              </p>
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500 text-sm">{row.department}</td>
+                          </>
+                        )}
+
+                        {/* Check In */}
+                        <td className="px-5 py-3.5">
+                          <Input
+                            type="time"
+                            disabled={!canManage || row.status === 'absent' || isOnLeave}
+                            value={row.status === 'absent' ? '' : row.check_in}
+                            onChange={(e) => handleRowChange(index, 'check_in', e.target.value)}
+                            className="h-9 font-mono text-xs bg-transparent disabled:opacity-40"
+                          />
                         </td>
-                      )}
-                    </tr>
-                  ))
+
+                        {/* Check Out */}
+                        <td className="px-5 py-3.5">
+                          <Input
+                            type="time"
+                            disabled={!canManage || row.status === 'absent' || isOnLeave}
+                            value={row.status === 'absent' ? '' : row.check_out}
+                            onChange={(e) => handleRowChange(index, 'check_out', e.target.value)}
+                            className="h-9 font-mono text-xs bg-transparent disabled:opacity-40"
+                          />
+                        </td>
+
+                        {/* OT Hours */}
+                        <td className="px-5 py-3.5">
+                          <Input
+                            type="number"
+                            disabled={!canManage || row.status === 'absent' || isOnLeave}
+                            step="0.5"
+                            min="0"
+                            max="12"
+                            value={row.status === 'absent' ? 0 : row.overtime_hours}
+                            onChange={(e) => handleRowChange(index, 'overtime_hours', Number(e.target.value))}
+                            className="h-9 text-xs bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+                          />
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-5 py-3.5">
+                          <select
+                            disabled={!canManage || isOnLeave}
+                            value={row.status}
+                            onChange={(e) => {
+                              const nextStatus = e.target.value;
+                              handleRowChange(index, 'status', nextStatus);
+                              if (nextStatus === 'absent') {
+                                handleRowChange(index, 'check_in', '');
+                                handleRowChange(index, 'check_out', '');
+                                handleRowChange(index, 'overtime_hours', 0);
+                              }
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-xs h-9 focus:outline-none bg-transparent font-medium disabled:opacity-50"
+                          >
+                            {statusOptions.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Verification badge */}
+                        <td className="px-5 py-3.5">
+                          {isOnLeave ? (
+                            <Badge className="bg-red-50 text-red-700 border border-red-200 shadow-none font-normal gap-1 rounded-md animate-pulse">
+                              <Plane size={12} /> On Approved Leave
+                            </Badge>
+                          ) : row.is_saved ? (
+                            <Badge className="bg-green-50 text-green-700 border border-green-200 shadow-none font-normal gap-1 rounded-md">
+                              <Check size={12} /> Saved
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-slate-400 border-slate-200 font-normal rounded-md">
+                              Unsaved
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
+
+            {/* Pagination */}
+            {backendWorksheet && backendWorksheet.last_page > 1 && (
+              <div className="px-5 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between select-none">
+                <span className="text-xs text-slate-500 font-medium">
+                  Page {backendWorksheet.current_page} of {backendWorksheet.last_page} ({backendWorksheet.total} records)
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    className="h-8 text-xs gap-1"
+                  >
+                    <ChevronLeft size={14} /> Prev
+                  </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={page === backendWorksheet.last_page}
+                    onClick={() => setPage((p) => Math.min(p + 1, backendWorksheet.last_page))}
+                    className="h-8 text-xs gap-1"
+                  >
+                    Next <ChevronRight size={14} />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
         <>
           {/* Month Navigator */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm w-fit">
             <button
               onClick={prevMonth}
               className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500"
@@ -512,7 +545,7 @@ export default function AttendancePage() {
               <ChevronLeft size={16} />
             </button>
             <span className="text-sm font-semibold text-slate-700 w-36 text-center">
-              {monthName} {year}
+              {new Date(year, month - 1).toLocaleString('default', { month: 'long' })} {year}
             </span>
             <button
               onClick={nextMonth}
@@ -522,15 +555,14 @@ export default function AttendancePage() {
             </button>
           </div>
 
-          <MonthlyReportTab month={month} year={year} />
+          <MonthlyReportTab
+            month={month}
+            year={year}
+            employeeId={scopedEmployeeId}
+            isAdmin={isAdmin}
+          />
         </>
       )}
-
-      <AttendanceModal
-        open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditRecord(null); }}
-        attendance={editRecord}
-      />
     </div>
   );
 }

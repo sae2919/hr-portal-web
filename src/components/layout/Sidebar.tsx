@@ -10,7 +10,7 @@ import {
   Briefcase,
   Clock,
   Calendar,
-  DollarSign,
+  IndianRupee,
   UserPlus,
   Settings,
   ChevronLeft,
@@ -58,7 +58,7 @@ const navItems = [
   {
     label: 'Payroll',
     href: '/payroll',
-    icon: DollarSign,
+    icon: IndianRupee,
     roles: ['admin', 'hr'],
   },
   {
@@ -100,20 +100,29 @@ export function Sidebar({ userRole }: { userRole: string }) {
         <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
           <Building2 size={16} className="text-white" />
         </div>
+
         {!collapsed && (
           <div>
-            <p className="text-sm font-bold text-white">HR Portal</p>
-            <p className="text-xs text-slate-400">Management System</p>
+            <p className="text-sm font-bold text-white">
+              HR Portal
+            </p>
+
+            <p className="text-xs text-slate-400">
+              Management System
+            </p>
           </div>
         )}
       </div>
 
-      {/* Nav Items */}
+      {/* Navigation */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {filtered.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== '/dashboard' && pathname.startsWith(item.href));
+            (
+              item.href !== '/dashboard' &&
+              pathname.startsWith(item.href)
+            );
 
           return (
             <Link
@@ -128,22 +137,31 @@ export function Sidebar({ userRole }: { userRole: string }) {
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               )}
             >
-              <item.icon size={18} className="flex-shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              <item.icon
+                size={18}
+                className="flex-shrink-0"
+              />
+
+              {!collapsed && (
+                <span>{item.label}</span>
+              )}
             </Link>
           );
         })}
       </nav>
 
-      {/* Collapse Toggle Button */}
+      {/* Collapse Button */}
       <button
         onClick={() => setCollapsed((c) => !c)}
         className="absolute -right-3 top-20 w-6 h-6 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-full flex items-center justify-center text-slate-300 hover:text-white transition-colors z-10"
       >
-        {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+        {collapsed
+          ? <ChevronRight size={12} />
+          : <ChevronLeft size={12} />
+        }
       </button>
 
-      {/* Bottom user hint */}
+      {/* Footer */}
       {!collapsed && (
         <div className="p-4 border-t border-slate-700/50">
           <p className="text-xs text-slate-500 text-center">

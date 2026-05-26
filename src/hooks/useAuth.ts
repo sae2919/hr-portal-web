@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import api from "@/lib/api";
+import api from "@/lib/api"; 
 import { useAuthStore } from "@/store/authStore";
 
 const parseResponse = (data: any) => {
@@ -16,18 +16,29 @@ const parseResponse = (data: any) => {
 export const useLogin = () => {
   const router = useRouter();
   const { setAuth } = useAuthStore();
+  
   return useMutation({
     mutationFn: async (credentials: any) => {
-      const res = await api.post("/login", credentials);
+      // FIXED: Removed duplicate prefix. Becomes -> /api/v1/login
+      const res = await api.post("/v1/login", credentials);
       return parseResponse(res.data);
     },
     onSuccess: (data: any) => {
       const token = data?.token ?? data?.data?.token ?? null;
       const user = data?.user ?? data?.data?.user ?? null;
+      
       if (!token || !user) return;
+      
       setAuth(user, token);
+      
       setTimeout(() => {
-        router.push(user.role === "employee" ? "/attendance" : "/dashboard");
+        const role = user.role ? user.role.toLowerCase() : "employee";
+        
+        if (role === "admin" || role === "superadmin") {
+          router.push("/dashboard");
+        } else {
+          router.push("/workspace");
+        }
       }, 200);
     },
   });
@@ -37,8 +48,9 @@ export const useLogout = () => {
   const router = useRouter();
   const { clearAuth } = useAuthStore();
   const queryClient = useQueryClient();
+  
   return useMutation({
-    mutationFn: () => api.post("/logout"),
+    mutationFn: () => api.post("/v1/logout"),
     onSettled: () => {
       clearAuth();
       queryClient.clear();
@@ -51,7 +63,8 @@ export const useMe = () => {
   const { isAuthenticated } = useAuthStore();
   return useQuery({
     queryKey: ["me"],
-    queryFn: () => api.get("/me").then((r) => r.data.user),
+    // FIXED: Corrected route address mapping prefix string
+    queryFn: () => api.get("/v1/me").then((r) => r.data.user),
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
@@ -60,7 +73,8 @@ export const useMe = () => {
 export const useForgotPassword = () => {
   return useMutation({
     mutationFn: (data: any) =>
-      api.post("/forgot-password", data).then((r) => r.data),
+      // FIXED: Corrected route address mapping prefix string
+      api.post("/v1/forgot-password", data).then((r) => r.data),
   });
 };
 
@@ -68,7 +82,8 @@ export const useResetPassword = () => {
   const router = useRouter();
   return useMutation({
     mutationFn: (data: any) =>
-      api.post("/reset-password", data).then((r) => r.data),
+      // FIXED: Corrected route address mapping prefix string
+      api.post("/v1/reset-password", data).then((r) => r.data),
     onSuccess: () => {
       router.push("/login?reset=success");
     },
