@@ -15,26 +15,31 @@ import { Badge } from '@/components/ui/badge';
 import { Bell, LogOut, User, Settings, Loader2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
-// Modified helper function to parse titles dynamically based on active system roles
 function getPageTitle(pathname: string, role?: string): string {
   const map: Record<string, string> = {
     '/dashboard': 'Dashboard',
-    '/employees': 'Employees',
+    '/workspace':  'Dashboard',
+    '/employees':  'Employees',
     '/departments': 'Departments',
     '/designations': 'Designations',
     '/attendance': 'Attendance',
-    '/leaves': 'Leave Management',
-    '/payroll': 'Payroll',
+    '/leaves':     'Leave Management',
+    '/payroll':    'Payroll',
     '/recruitment': 'Recruitment',
-    '/settings': 'Settings',
+    '/settings':   'Settings',
   };
 
   for (const key of Object.keys(map)) {
     if (pathname.startsWith(key)) return map[key];
   }
 
-  // If path doesn't explicitly match a sub-module, evaluate the logged-in user role context
-  return role === 'admin' ? 'HR Portal' : 'Employee Portal';
+  // Fallback: role-aware portal name
+  if (!role) return 'Employee Portal';
+  if (['admin', 'hr'].includes(role))                       return 'HR Portal';
+  if (role === 'manager')                                    return 'Manager Portal';
+  if (role === 'team_lead')                                  return 'Team Lead Portal';
+  if (role === 'sales_manager')                              return 'Sales Manager Portal';
+  return 'Employee Portal';
 }
 
 function getInitials(name: string): string {
@@ -104,10 +109,7 @@ export function Header() {
               <p className="text-xs text-slate-400 font-normal mt-0.5">
                 {user?.email}
               </p>
-              <Badge
-                variant="secondary"
-                className="mt-1.5 text-xs capitalize"
-              >
+              <Badge variant="secondary" className="mt-1.5 text-xs capitalize">
                 {user?.role}
               </Badge>
             </DropdownMenuLabel>

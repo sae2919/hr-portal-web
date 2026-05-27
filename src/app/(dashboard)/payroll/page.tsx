@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 
 import {
   IndianRupee, CreditCard, CheckCircle2, Clock, Mail, Loader2, Send, Check, X, Inbox, FileText
@@ -66,6 +67,9 @@ export default function PayrollPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loadingUser, setLoadingUser] = useState<boolean>(true);
   const [loadingData, setLoadingData] = useState<boolean>(false);
+
+  // ✅ FIX: Get token from auth store for PDF download link
+  const { token } = useAuthStore();
 
   useEffect(() => {
     async function fetchUser() {
@@ -148,7 +152,6 @@ export default function PayrollPage() {
   async function handleFulfillRequest(id: number, status: 'approved' | 'rejected') {
     setProcessingRequestId(id);
     try {
-      // FIXED: Closed out trailing parameter layouts cleanly with correct backticks
       await api.patch(`/v1/payroll-requests/${id}/fulfill`, { status });
       toast.success(`Request successfully marked as ${status}.`);
       loadPayrollData(page);
@@ -287,11 +290,11 @@ export default function PayrollPage() {
                           </button>
                         )}
                         
-                        {/* FIXED & UPDATED: Added conditional view toggle profile logic for regular employees */}
+                        {/* ✅ FIX: token now comes from useAuthStore instead of localStorage */}
                         {!isAdmin && (
                           payroll.status === 'paid' ? (
                             <a 
-                              href={`http://127.0.0.1:8000/api/v1/payrolls/${payroll.id}/payslip?token=${localStorage.getItem('token') || ''}`}
+                              href={`http://127.0.0.1:8000/api/v1/payrolls/${payroll.id}/payslip?token=${token || ''}`}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium transition shadow-sm"
