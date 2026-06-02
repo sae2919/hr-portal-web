@@ -52,7 +52,7 @@ export const useAttendance = (params?: {
   return useQuery({
     queryKey: [KEY, params],
     queryFn: async () => {
-      const response = await api.get('/v1/attendance', {
+      const response = await api.get('/attendance', {
         params: {
           ...params,
           page:     params?.page || 1,
@@ -74,7 +74,7 @@ export const useMonthlyReport = (month: number, year: number, employeeId?: numbe
   }>({
     queryKey: ['attendance-report', month, year, employeeId],   // employeeId in key so it re-fetches correctly
     queryFn: async () => {
-      const response = await api.get('/v1/attendance/report/monthly', {
+      const response = await api.get('/attendance/report/monthly', {
         params: {
           month,
           year,
@@ -92,7 +92,7 @@ export const useSaveAttendance = () => {
 
   return useMutation({
     mutationFn: async (data: StoreAttendancePayload) => {
-      const response = await api.post('/v1/attendance', data);
+      const response = await api.post('/attendance', data);
       return response.data;
     },
     onSuccess: () => {
@@ -111,7 +111,7 @@ export const useUpdateAttendance = () => {
 
   return useMutation({
     mutationFn: async ({ id, ...data }: Partial<StoreAttendancePayload> & { id: number }) => {
-      const response = await api.put(`/v1/attendance/${id}`, data);
+      const response = await api.put(`/attendance/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -130,7 +130,7 @@ export const useDeleteAttendance = () => {
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const response = await api.delete(`/v1/attendance/${id}`);
+      const response = await api.delete(`/attendance/${id}`);
       return response.data;
     },
     onSuccess: () => {
@@ -149,7 +149,7 @@ export const useCheckIn = () => {
 
   return useMutation({
     mutationFn: async (employee_id: number) => {
-      const response = await api.post('/v1/attendance/checkin', { employee_id });
+      const response = await api.post('/attendance/checkin', { employee_id });
       return response.data;
     },
     onSuccess: (data) => {
@@ -168,7 +168,7 @@ export const useCheckOut = () => {
 
   return useMutation({
     mutationFn: async (employee_id: number) => {
-      const response = await api.post('/v1/attendance/checkout', { employee_id });
+      const response = await api.post('/attendance/checkout', { employee_id });
       return response.data;
     },
     onSuccess: (data) => {
@@ -197,7 +197,7 @@ export const useWorksheet = (params: {
   }>({
     queryKey: ['attendance-worksheet', params],   // employee_id is part of params so cache is scoped
     queryFn: async () => {
-      const response = await api.get('/v1/attendance/worksheet', {
+      const response = await api.get('/attendance/worksheet', {
         params: {
           date:     params.date,
           page:     params.page,
@@ -216,7 +216,7 @@ export const useSaveBulkAttendance = () => {
 
   return useMutation({
     mutationFn: async (payload: BulkStorePayload) => {
-      const response = await api.post('/v1/attendance/bulk-store', payload);
+      const response = await api.post('/attendance/bulk-store', payload);
       return response.data;
     },
     onSuccess: (data) => {

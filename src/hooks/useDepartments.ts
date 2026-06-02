@@ -10,6 +10,7 @@ export const useDepartments = (params?: {
   page?: number;
   search?: string;
   status?: string;
+  per_page?: number;
 }) => {
 
   return useQuery({
@@ -23,13 +24,13 @@ export const useDepartments = (params?: {
 
       const response =
         await api.get(
-          '/v1/departments',
+          '/departments',
           {
             params: {
               ...params,
               page:
                 params?.page || 1,
-              per_page: 10,
+              per_page: params?.per_page || 100,
             },
           }
         );
@@ -38,6 +39,7 @@ export const useDepartments = (params?: {
     },
   });
 };
+
 
 export const useCreateDepartment = () => {
 

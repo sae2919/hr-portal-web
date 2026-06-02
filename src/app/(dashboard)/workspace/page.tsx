@@ -1,24 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import BirthdayNotification from '@/components/events/BirthdayNotification';
+import { quoteService } from '@/services/quoteService';
+import { eventService } from '@/services/eventService';
+import { resolveRoleTier } from '@/hooks/useAuth';
 import {
   Users, Clock, Calendar, IndianRupee, TrendingUp,
   UserCheck, Building2, Loader2, User, Receipt,
   CheckCircle2, XCircle, AlertCircle, BarChart3,
-  ArrowUpRight, ChevronRight, Briefcase, ShieldCheck,
-  Star, BarChart2
+  ChevronRight, Briefcase, ShieldCheck,
+  BarChart2, Quote, Cake, Gift, Sparkles, Heart,
+  RefreshCw, PartyPopper,
 } from 'lucide-react';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface WorkspaceStats {
   department: string;
-  role_tier: 'manager' | 'team_lead' | 'sales_manager' | 'employee' | string;
-
+  role_tier: string;
+  designation?: string;
   manager_stats?: {
     dept_employee_count: number;
     dept_present_today: number;
@@ -27,7 +32,6 @@ interface WorkspaceStats {
     dept_absent_today: number;
     dept_attendance_rate: number;
   };
-
   employee_stats?: {
     present_this_month: number;
     absent_this_month: number;
@@ -38,16 +42,99 @@ interface WorkspaceStats {
   };
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+const fallbackStats: WorkspaceStats = {
+  department: 'Your Department',
+  role_tier: 'employee',
+  manager_stats: {
+    dept_employee_count: 0, dept_present_today: 0, dept_on_leave: 0,
+    dept_pending_leave_approvals: 0, dept_absent_today: 0, dept_attendance_rate: 0,
+  },
+  employee_stats: {
+    present_this_month: 0, absent_this_month: 0, approved_leaves: 0,
+    pending_leaves: 0, latest_payslip_month: null, latest_payslip_net: null,
+  },
+};
 
-function StatCard({
-  label, value, icon: Icon, color, sub,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'teal';
-  sub?: string;
+const fallbackQuotes = [
+  { quote: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+  { quote: "Success is not final, failure is not fatal: it is the courage to continue that counts.", author: "Winston Churchill" },
+  { quote: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
+  { quote: "The future depends on what you do today.", author: "Mahatma Gandhi" },
+];
+
+// ─── Shared Components ────────────────────────────────────────────────────────
+
+function QuoteAndTodaySpecial({ dailyQuote, todaySpecial }: {
+  dailyQuote: any;
+  todaySpecial: { birthdays: any[]; anniversaries: any[] };
+}) {
+  const hasTodaySpecial = todaySpecial.birthdays.length > 0 || todaySpecial.anniversaries.length > 0;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {dailyQuote && (
+        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl p-5 border border-amber-200 shadow-sm flex flex-col">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+              <Quote size={14} className="text-amber-600" />
+            </div>
+            <span className="text-xs font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-1">
+              <Sparkles size={11} className="text-amber-500" /> Daily Inspiration
+            </span>
+          </div>
+          <p className="text-sm text-slate-700 italic leading-relaxed flex-1">"{dailyQuote.quote}"</p>
+          {dailyQuote.author && <p className="text-xs text-amber-600 mt-3 font-medium">— {dailyQuote.author}</p>}
+        </div>
+      )}
+
+      <div className="bg-gradient-to-br from-pink-50 to-rose-50 rounded-2xl p-5 border border-pink-200 shadow-sm flex flex-col">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center shrink-0">
+            <Cake size={14} className="text-pink-500" />
+          </div>
+          <span className="text-xs font-semibold text-pink-600 uppercase tracking-wide flex items-center gap-1">
+            <Sparkles size={11} className="text-pink-400" /> Today's Special
+          </span>
+        </div>
+        {hasTodaySpecial ? (
+          <div className="space-y-2 flex-1 overflow-y-auto max-h-40 pr-1">
+            {todaySpecial.birthdays.map((b: any) => (
+              <div key={b.id ?? b.name} className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2">
+                <span className="text-lg">🎂</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{b.name}</p>
+                  <p className="text-xs text-slate-400">{b.department || ''}</p>
+                </div>
+                <span className="text-xs bg-pink-100 text-pink-600 px-2 py-0.5 rounded-full shrink-0">Birthday</span>
+              </div>
+            ))}
+            {todaySpecial.anniversaries.map((a: any) => (
+              <div key={a.id ?? a.name} className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2">
+                <span className="text-lg">🎊</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{a.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {a.years_completed ? `${a.years_completed} yr${a.years_completed > 1 ? 's' : ''} · ` : ''}{a.department || ''}
+                  </p>
+                </div>
+                <span className="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full shrink-0">Anniversary</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
+            <PartyPopper size={26} className="text-pink-200 mb-2" />
+            <p className="text-xs text-slate-400">No birthdays or anniversaries today</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, color, sub }: {
+  label: string; value: string | number; icon: React.ElementType;
+  color: 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'teal'; sub?: string;
 }) {
   const palette = {
     blue:   { bg: 'bg-blue-50',    text: 'text-blue-600',    border: 'border-blue-100' },
@@ -72,14 +159,9 @@ function StatCard({
   );
 }
 
-// ─── Quick Action Button ──────────────────────────────────────────────────────
-
 function QuickAction({ href, icon: Icon, label }: { href: string; icon: React.ElementType; label: string }) {
   return (
-    <Link
-      href={href}
-      className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all group shadow-sm bg-white"
-    >
+    <Link href={href} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all group shadow-sm bg-white">
       <div className="w-10 h-10 bg-slate-100 group-hover:bg-blue-100 rounded-xl flex items-center justify-center transition-colors">
         <Icon className="w-5 h-5 text-slate-600 group-hover:text-blue-600" />
       </div>
@@ -88,15 +170,11 @@ function QuickAction({ href, icon: Icon, label }: { href: string; icon: React.El
   );
 }
 
-// ─── Manager / TeamLead Dashboard ────────────────────────────────────────────
+// ─── Manager / Team Lead Dashboard ───────────────────────────────────────────
 
-function ManagerDashboard({
-  stats, userName, roleLabel, accentColor,
-}: {
-  stats: WorkspaceStats;
-  userName: string;
-  roleLabel: string;
-  accentColor: string;
+function ManagerDashboard({ stats, userName, roleLabel, dailyQuote, todaySpecial }: {
+  stats: WorkspaceStats; userName: string; roleLabel: string;
+  dailyQuote: any; todaySpecial: { birthdays: any[]; anniversaries: any[] };
 }) {
   const ms = stats.manager_stats;
   const dept = stats.department || 'Your Department';
@@ -104,7 +182,6 @@ function ManagerDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -118,38 +195,31 @@ function ManagerDashboard({
             {roleLabel}
           </div>
         </div>
-
-        {/* Attendance progress bar */}
         <div className="mt-5">
           <div className="flex justify-between items-center mb-1.5">
             <span className="text-xs text-slate-400">Today's Attendance Rate</span>
             <span className="text-xs font-semibold text-white">{attendanceRate}%</span>
           </div>
           <div className="w-full bg-white/10 rounded-full h-2">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-emerald-400 transition-all duration-700"
-              style={{ width: `${Math.min(attendanceRate, 100)}%` }}
-            />
+            <div className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-emerald-400 transition-all duration-700"
+              style={{ width: `${Math.min(attendanceRate, 100)}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      <QuoteAndTodaySpecial dailyQuote={dailyQuote} todaySpecial={todaySpecial} />
+
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Dept Employees"    value={ms?.dept_employee_count ?? 0}         icon={Users}      color="blue"   sub="Total headcount" />
-        <StatCard label="Present Today"     value={ms?.dept_present_today ?? 0}           icon={UserCheck}  color="green"  sub={`of ${ms?.dept_employee_count ?? 0} employees`} />
-        <StatCard label="On Leave Today"    value={ms?.dept_on_leave ?? 0}                icon={Calendar}   color="orange" />
-        <StatCard label="Absent Today"      value={ms?.dept_absent_today ?? 0}            icon={XCircle}    color="red" />
+        <StatCard label="Dept Employees"    value={ms?.dept_employee_count ?? 0}         icon={Users}       color="blue"   sub="Total headcount" />
+        <StatCard label="Present Today"     value={ms?.dept_present_today ?? 0}           icon={UserCheck}   color="green"  sub={`of ${ms?.dept_employee_count ?? 0} employees`} />
+        <StatCard label="On Leave Today"    value={ms?.dept_on_leave ?? 0}                icon={Calendar}    color="orange" />
+        <StatCard label="Absent Today"      value={ms?.dept_absent_today ?? 0}            icon={XCircle}     color="red" />
         <StatCard label="Pending Approvals" value={ms?.dept_pending_leave_approvals ?? 0} icon={AlertCircle} color="purple" sub="Leave requests" />
-        <StatCard label="Attendance Rate"   value={`${attendanceRate}%`}                  icon={TrendingUp} color="teal"   sub="Today" />
+        <StatCard label="Attendance Rate"   value={`${attendanceRate}%`}                  icon={TrendingUp}  color="teal"   sub="Today" />
       </div>
 
-      {/* Pending leave approvals CTA */}
       {(ms?.dept_pending_leave_approvals ?? 0) > 0 && (
-        <Link
-          href="/leaves"
-          className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 hover:bg-amber-100 transition-colors group"
-        >
+        <Link href="/leaves" className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 hover:bg-amber-100 transition-colors group">
           <div className="flex items-center gap-3">
             <AlertCircle size={18} className="text-amber-500 shrink-0" />
             <div>
@@ -163,94 +233,71 @@ function ManagerDashboard({
         </Link>
       )}
 
-      {/* Quick Actions */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <QuickAction href="/employees"   icon={Users}    label="Team Members" />
-          <QuickAction href="/attendance"  icon={Clock}    label="Attendance" />
-          <QuickAction href="/leaves"      icon={Calendar} label="Leave Requests" />
-          <QuickAction href="/profile/edit" icon={User}   label="My Profile" />
+          <QuickAction href="/employees"    icon={Users}    label="Team Members" />
+          <QuickAction href="/attendance"   icon={Clock}    label="Attendance" />
+          <QuickAction href="/leaves"       icon={Calendar} label="Leave Requests" />
+          <QuickAction href="/profile/edit" icon={User}     label="My Profile" />
         </div>
       </div>
     </div>
   );
 }
 
-// ─── SalesManager Dashboard ───────────────────────────────────────────────────
+// ─── Sales Manager Dashboard ──────────────────────────────────────────────────
 
-function SalesManagerDashboard({ stats, userName }: { stats: WorkspaceStats; userName: string }) {
+function SalesManagerDashboard({ stats, userName, dailyQuote, todaySpecial }: {
+  stats: WorkspaceStats; userName: string;
+  dailyQuote: any; todaySpecial: { birthdays: any[]; anniversaries: any[] };
+}) {
   const ms = stats.manager_stats;
   const dept = stats.department || 'Sales';
   const attendanceRate = ms?.dept_attendance_rate ?? 0;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-gradient-to-r from-blue-700 to-blue-900 rounded-2xl p-6 text-white shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold">Welcome back, {userName} 👋</h2>
-            <p className="text-blue-200 text-sm mt-1">
-              Sales Team: <span className="text-white font-semibold">{dept}</span>
-            </p>
+            <p className="text-blue-200 text-sm mt-1">Sales Team: <span className="text-white font-semibold">{dept}</span></p>
           </div>
           <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/10 text-xs text-blue-100 font-medium">
-            <BarChart2 size={14} className="text-blue-300" />
-            Sales Manager
+            <BarChart2 size={14} className="text-blue-300" /> Sales Manager
           </div>
         </div>
-
         <div className="mt-5">
           <div className="flex justify-between items-center mb-1.5">
             <span className="text-xs text-blue-300">Team Attendance Rate</span>
             <span className="text-xs font-semibold text-white">{attendanceRate}%</span>
           </div>
           <div className="w-full bg-white/10 rounded-full h-2">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-blue-300 to-emerald-400 transition-all duration-700"
-              style={{ width: `${Math.min(attendanceRate, 100)}%` }}
-            />
+            <div className="h-2 rounded-full bg-gradient-to-r from-blue-300 to-emerald-400 transition-all duration-700"
+              style={{ width: `${Math.min(attendanceRate, 100)}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      <QuoteAndTodaySpecial dailyQuote={dailyQuote} todaySpecial={todaySpecial} />
+
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Team Size"         value={ms?.dept_employee_count ?? 0}         icon={Users}      color="blue"   sub="Active members" />
-        <StatCard label="Present Today"     value={ms?.dept_present_today ?? 0}           icon={UserCheck}  color="green"  sub={`of ${ms?.dept_employee_count ?? 0}`} />
-        <StatCard label="On Leave"          value={ms?.dept_on_leave ?? 0}                icon={Calendar}   color="orange" />
-        <StatCard label="Absent Today"      value={ms?.dept_absent_today ?? 0}            icon={XCircle}    color="red" />
+        <StatCard label="Team Size"         value={ms?.dept_employee_count ?? 0}         icon={Users}       color="blue"   sub="Active members" />
+        <StatCard label="Present Today"     value={ms?.dept_present_today ?? 0}           icon={UserCheck}   color="green"  sub={`of ${ms?.dept_employee_count ?? 0}`} />
+        <StatCard label="On Leave"          value={ms?.dept_on_leave ?? 0}                icon={Calendar}    color="orange" />
+        <StatCard label="Absent Today"      value={ms?.dept_absent_today ?? 0}            icon={XCircle}     color="red" />
         <StatCard label="Pending Approvals" value={ms?.dept_pending_leave_approvals ?? 0} icon={AlertCircle} color="purple" sub="Leave requests" />
-        <StatCard label="Attendance Rate"   value={`${attendanceRate}%`}                  icon={TrendingUp} color="teal"   sub="Today" />
+        <StatCard label="Attendance Rate"   value={`${attendanceRate}%`}                  icon={TrendingUp}  color="teal"   sub="Today" />
       </div>
 
-      {(ms?.dept_pending_leave_approvals ?? 0) > 0 && (
-        <Link
-          href="/leaves"
-          className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 hover:bg-amber-100 transition-colors group"
-        >
-          <div className="flex items-center gap-3">
-            <AlertCircle size={18} className="text-amber-500 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-amber-800">
-                {ms?.dept_pending_leave_approvals} leave request{(ms?.dept_pending_leave_approvals ?? 0) > 1 ? 's' : ''} pending approval
-              </p>
-              <p className="text-xs text-amber-600 mt-0.5">Review and approve or reject</p>
-            </div>
-          </div>
-          <ChevronRight size={16} className="text-amber-500 group-hover:translate-x-0.5 transition-transform" />
-        </Link>
-      )}
-
-      {/* Quick Actions */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <QuickAction href="/employees"    icon={Users}      label="Team Members" />
-          <QuickAction href="/attendance"   icon={Clock}      label="Attendance" />
-          <QuickAction href="/leaves"       icon={Calendar}   label="Leave Requests" />
-          <QuickAction href="/recruitment"  icon={Briefcase}  label="Recruitment" />
+          <QuickAction href="/employees"   icon={Users}     label="Team Members" />
+          <QuickAction href="/attendance"  icon={Clock}     label="Attendance" />
+          <QuickAction href="/leaves"      icon={Calendar}  label="Leave Requests" />
+          <QuickAction href="/recruitment" icon={Briefcase} label="Recruitment" />
         </div>
       </div>
     </div>
@@ -259,49 +306,45 @@ function SalesManagerDashboard({ stats, userName }: { stats: WorkspaceStats; use
 
 // ─── Employee Dashboard ───────────────────────────────────────────────────────
 
-function EmployeeDashboard({ stats, userName }: { stats: WorkspaceStats; userName: string }) {
+function EmployeeDashboard({ stats, userName, dailyQuote, todaySpecial }: {
+  stats: WorkspaceStats; userName: string;
+  dailyQuote: any; todaySpecial: { birthdays: any[]; anniversaries: any[] };
+}) {
   const es = stats.employee_stats;
   const dept = stats.department || 'General';
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold">Welcome back, {userName} 👋</h2>
-            <p className="text-slate-300 text-sm mt-1">
-              Department: <span className="text-blue-400 font-semibold">{dept}</span>
-            </p>
+            <p className="text-slate-300 text-sm mt-1">Department: <span className="text-blue-400 font-semibold">{dept}</span></p>
           </div>
           <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/10 text-xs text-slate-300 font-medium">
-            <Briefcase size={14} className="text-blue-400" />
-            Employee
+            <Briefcase size={14} className="text-blue-400" /> Employee
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      <QuoteAndTodaySpecial dailyQuote={dailyQuote} todaySpecial={todaySpecial} />
+
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Present This Month" value={es?.present_this_month ?? 0}  icon={CheckCircle2} color="green"  sub="Working days" />
-        <StatCard label="Absent This Month"  value={es?.absent_this_month ?? 0}   icon={XCircle}      color="red" />
-        <StatCard label="Approved Leaves"    value={es?.approved_leaves ?? 0}     icon={Calendar}     color="blue"   sub="This year" />
-        <StatCard label="Pending Leaves"     value={es?.pending_leaves ?? 0}      icon={AlertCircle}  color="orange" sub="Awaiting approval" />
+        <StatCard label="Present This Month" value={es?.present_this_month ?? 0} icon={CheckCircle2} color="green"  sub="Working days" />
+        <StatCard label="Absent This Month"  value={es?.absent_this_month ?? 0}  icon={XCircle}      color="red" />
+        <StatCard label="Approved Leaves"    value={es?.approved_leaves ?? 0}    icon={Calendar}     color="blue"   sub="This year" />
+        <StatCard label="Pending Leaves"     value={es?.pending_leaves ?? 0}     icon={AlertCircle}  color="orange" sub="Awaiting approval" />
         {es?.latest_payslip_month && (
           <StatCard
-            label="Last month salary"
+            label="Last Month Salary"
             value={`₹${Number(es.latest_payslip_net ?? 0).toLocaleString('en-IN')}`}
-            icon={IndianRupee}
-            color="teal"
-            sub={es.latest_payslip_month}
+            icon={IndianRupee} color="teal" sub={es.latest_payslip_month}
           />
         )}
         <StatCard
           label="Leave Balance"
           value={`${Math.max(0, 12 - (es?.approved_leaves ?? 0))} days`}
-          icon={BarChart3}
-          color="purple"
-          sub="Remaining"
+          icon={BarChart3} color="purple" sub="Remaining"
         />
       </div>
 
@@ -314,14 +357,13 @@ function EmployeeDashboard({ stats, userName }: { stats: WorkspaceStats; userNam
         </div>
       )}
 
-      {/* Quick Actions */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <QuickAction href="/profile/edit" icon={User}      label="Edit Profile" />
-          <QuickAction href="/attendance"   icon={Clock}     label="Attendance" />
-          <QuickAction href="/leaves"       icon={Calendar}  label="Apply Leave" />
-          <QuickAction href="/payroll"      icon={Receipt}   label="My Payslips" />
+          <QuickAction href="/profile/edit" icon={User}     label="Edit Profile" />
+          <QuickAction href="/attendance"   icon={Clock}    label="Attendance" />
+          <QuickAction href="/leaves"       icon={Calendar} label="Apply Leave" />
+          <QuickAction href="/payroll"      icon={Receipt}  label="My Payslips" />
         </div>
       </div>
     </div>
@@ -335,29 +377,72 @@ export default function WorkspacePage() {
   const { user, isAuthenticated, token } = useAuthStore();
   const [stats, setStats] = useState<WorkspaceStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [apiError, setApiError] = useState(false);
+  const [dailyQuote, setDailyQuote] = useState<any>(null);
+  const [todaySpecial, setTodaySpecial] = useState<{ birthdays: any[]; anniversaries: any[] }>({
+    birthdays: [], anniversaries: [],
+  });
 
-  const userRole = user?.role ?? '';
+  // Resolve tier from user object — same logic as login redirect and sidebar
+  const tier = resolveRoleTier(user);
+
+  const fetchWorkspaceData = useCallback(async () => {
+    if (!isAuthenticated || !token) return;
+    setLoading(true);
+    setApiError(false);
+    try {
+      const statsRes = await api.get('/workspace/stats', { timeout: 10000 });
+      setStats(statsRes.data);
+    } catch {
+      setApiError(true);
+      setStats(fallbackStats);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, token]);
+
+  const loadDailyQuote = useCallback(async () => {
+    try {
+      const res = await quoteService.getRandomQuote();
+      setDailyQuote(res.success && res.data
+        ? res.data
+        : fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)]);
+    } catch {
+      setDailyQuote(fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)]);
+    }
+  }, []);
+
+  const loadTodaySpecial = useCallback(async () => {
+    try {
+      const res = await eventService.getTodaySpecial();
+      if (res.success && res.data) {
+        setTodaySpecial({
+          birthdays: res.data.birthdays || [],
+          anniversaries: res.data.anniversaries || [],
+        });
+      }
+    } catch {
+      setTodaySpecial({ birthdays: [], anniversaries: [] });
+    }
+  }, []);
+
+  const handleRetry = () => {
+    fetchWorkspaceData();
+    loadDailyQuote();
+    loadTodaySpecial();
+  };
 
   useEffect(() => {
     if (!isAuthenticated || !token) return;
-
-    // Admin & HR belong on the main admin dashboard
-    if (userRole === 'admin' || userRole === 'hr') {
+    // Admin/HR should not be here
+    if (tier === 'admin' || tier === 'hr') {
       router.replace('/dashboard');
       return;
     }
-
-    api.get('/v1/workspace/stats')
-      .then(res => {
-        setStats(res.data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError(true);
-        setLoading(false);
-      });
-  }, [isAuthenticated, token, userRole, router]);
+    fetchWorkspaceData();
+    loadDailyQuote();
+    loadTodaySpecial();
+  }, [isAuthenticated, token, tier, router, fetchWorkspaceData, loadDailyQuote, loadTodaySpecial]);
 
   if (loading) {
     return (
@@ -367,36 +452,63 @@ export default function WorkspacePage() {
     );
   }
 
-  if (error || !stats) {
-    return (
-      <div className="flex flex-col h-[70vh] items-center justify-center gap-3 text-slate-400">
-        <XCircle size={32} />
-        <p className="text-sm">Could not load workspace data. Please refresh.</p>
-      </div>
-    );
-  }
-
   const firstName = user?.name?.split(' ')[0] ?? 'there';
+  const currentStats = stats || fallbackStats;
 
-  // ── Role-based dashboard routing ──
-  const isManager    = stats.role_tier === 'manager'      || userRole === 'manager';
-  const isTeamLead   = stats.role_tier === 'team_lead'    || userRole === 'team_lead';
-  const isSalesMgr   = stats.role_tier === 'sales_manager'|| userRole === 'sales_manager';
+  // Use frontend tier (resolveRoleTier) as primary,
+  // fall back to API role_tier if frontend can't determine it
+  const effectiveTier = tier !== 'employee' ? tier : (currentStats.role_tier ?? 'employee');
 
-  if (isSalesMgr) {
-    return <SalesManagerDashboard stats={stats} userName={firstName} />;
-  }
+  const isManager  = effectiveTier === 'manager';
+  const isTeamLead = effectiveTier === 'team_lead';
+  const isSalesMgr = effectiveTier === 'sales_manager';
 
-  if (isManager || isTeamLead) {
-    return (
-      <ManagerDashboard
-        stats={stats}
-        userName={firstName}
-        roleLabel={isTeamLead ? 'Team Lead' : 'Department Manager'}
-        accentColor={isTeamLead ? 'emerald' : 'blue'}
-      />
-    );
-  }
+  // Role label shown in dashboard header
+  const roleLabel = {
+    manager:       'Department Manager',
+    team_lead:     'Team Lead',
+    sales_manager: 'Sales Manager',
+  }[effectiveTier] ?? 'Employee';
 
-  return <EmployeeDashboard stats={stats} userName={firstName} />;
+  return (
+    <>
+      <BirthdayNotification />
+
+      {apiError && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertCircle size={20} className="text-amber-500 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Unable to connect to server</p>
+              <p className="text-xs text-amber-600">Showing cached data. Some information may be outdated.</p>
+            </div>
+          </div>
+          <button onClick={handleRetry}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 rounded-lg hover:bg-amber-200 transition">
+            <RefreshCw size={14} /> Retry
+          </button>
+        </div>
+      )}
+
+      {isSalesMgr && (
+        <SalesManagerDashboard
+          stats={currentStats} userName={firstName}
+          dailyQuote={dailyQuote} todaySpecial={todaySpecial}
+        />
+      )}
+      {(isManager || isTeamLead) && (
+        <ManagerDashboard
+          stats={currentStats} userName={firstName}
+          roleLabel={roleLabel}
+          dailyQuote={dailyQuote} todaySpecial={todaySpecial}
+        />
+      )}
+      {!isManager && !isTeamLead && !isSalesMgr && (
+        <EmployeeDashboard
+          stats={currentStats} userName={firstName}
+          dailyQuote={dailyQuote} todaySpecial={todaySpecial}
+        />
+      )}
+    </>
+  );
 }

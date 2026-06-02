@@ -42,7 +42,7 @@ export default function ProfileEditPage() {
     e.preventDefault();
     setLoadingSave(true);
     try {
-      const res = await api.put('/v1/profile', profile);
+      const res = await api.put('/profile', profile);
       setUser(res.data.data ?? res.data);
       toast.success('Profile updated successfully.');
     } catch (err: any) {
@@ -63,7 +63,7 @@ export default function ProfileEditPage() {
 
     setLoadingPass(true);
     try {
-      await api.put('/v1/profile/password', passwords);
+      await api.put('/profile/password', passwords);
       toast.success('Password changed successfully.');
       setPasswords({ current_password: '', new_password: '', new_password_confirmation: '' });
     } catch (err: any) {

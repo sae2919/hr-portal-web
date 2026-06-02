@@ -150,7 +150,7 @@ export default function DepartmentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
-  const { data, isLoading } = useDepartments({ search, page });
+  const { data, isLoading } = useDepartments({ search, page, per_page: 10 });
   const { mutate: deleteDepartment } = useDeleteDepartment();
 
   const departments = data?.data || [];
@@ -238,7 +238,7 @@ export default function DepartmentsPage() {
                   </td>
                 </tr>
               ) : (
-                departments.map((department) => (
+                departments.map((department: Department) => (
                   <tr key={department.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -260,7 +260,7 @@ export default function DepartmentsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-slate-600">
                         <Users className="w-4 h-4" />
-                        <span>{department.employees_count || 0}</span>
+                        <span>{department.employee_count || 0}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">

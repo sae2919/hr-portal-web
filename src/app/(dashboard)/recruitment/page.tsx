@@ -49,7 +49,7 @@ export default function RecruitmentPage() {
 
   const fetchRecruitment = async (currentPage: number = 1) => {
     try {
-      const response = await api.get('/v1/recruitment/dashboard', { // ✅ Fixed: added /v1
+      const response = await api.get('/recruitment/dashboard', { // ✅ Fixed: added /v1
         params: { page: currentPage, per_page: 10 },
       });
 
@@ -83,7 +83,7 @@ export default function RecruitmentPage() {
 
   const updateStatus = async (candidateId: number, status: string) => {
     try {
-      await api.patch(`/v1/candidates/${candidateId}/status`, { status }); // ✅ Fixed
+      await api.patch(`/candidates/${candidateId}/status`, { status }); // ✅ Fixed
       fetchRecruitment(page);
     } catch (error) {
       console.error(error);

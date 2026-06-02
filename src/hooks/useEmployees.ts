@@ -14,7 +14,7 @@ export const useEmployees = (params?: {
   return useQuery<Employee[]>({
     queryKey: [KEY, params],
     queryFn: () =>
-      api.get('/v1/employees', { params }).then((r) => r.data.data),
+      api.get('/employees', { params }).then((r) => r.data.data),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -25,6 +25,16 @@ export const useEmployee = (id: number) => {
     queryFn: () =>
       api.get(`/employees/${id}`).then((r) => r.data.data),
     enabled: !!id,
+  });
+};
+
+// Returns only employees with manager / team_lead / HR / admin roles
+export const useManagers = () => {
+  return useQuery<Employee[]>({
+    queryKey: [KEY, 'managers'],
+    queryFn: () =>
+      api.get('/employees/managers').then((r) => r.data.data),
+    staleTime: 5 * 60 * 1000,
   });
 };
 

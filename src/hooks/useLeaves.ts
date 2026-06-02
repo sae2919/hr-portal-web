@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { Leave, LeaveType, LeaveBalance, ApplyLeavePayload } from '@/types/leave';
 
-// ── Pagination Response Interface ───────────────────────────
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {
@@ -16,31 +15,29 @@ export interface PaginatedResponse<T> {
 
 const KEY = 'leaves';
 
-// ── FIXED: Added /v1 prefix and updated parsing to handle resource array wrappers ──
-export const useLeaveTypes = () => {
-  return useQuery<LeaveType[]>({
+export const useLeaveTypes = () =>
+  useQuery<LeaveType[]>({
     queryKey: ['leave-types'],
-    queryFn: () => api.get('/v1/leave-types').then((r) => {
-      // Handles both direct array inputs or wrapped JSON objects safely
-      return Array.isArray(r.data) ? r.data : r.data?.data ?? [];
-    }),
+    queryFn: () =>
+      api.get('/leave-types').then((r) =>
+        Array.isArray(r.data) ? r.data : r.data?.data ?? []
+      ),
     staleTime: 5 * 60 * 1000,
   });
-};
 
-// ── useLeaves with Paginated Metrics ────────────────
 export const useLeaves = (params?: {
-  page?: number;         
-  per_page?: number;     
+  page?: number;
+  per_page?: number;
   status?: string;
   employee_id?: number;
   department_id?: number;
   leave_type_id?: number;
-}) => {
-  return useQuery<PaginatedResponse<Leave>>({
+  team_lead_status?: string;
+}) =>
+  useQuery<PaginatedResponse<Leave>>({
     queryKey: [KEY, params],
-    queryFn: () => 
-      api.get('/v1/leaves', { 
+    queryFn: () =>
+      api.get('/leaves', {
         params: {
           page: params?.page ?? 1,
           per_page: params?.per_page ?? 10,
@@ -48,51 +45,50 @@ export const useLeaves = (params?: {
           employee_id: params?.employee_id,
           department_id: params?.department_id,
           leave_type_id: params?.leave_type_id,
-        }
-      }).then((r) => r.data), 
+          team_lead_status: params?.team_lead_status,
+        },
+      }).then((r) => r.data),
     staleTime: 60 * 1000,
   });
-};
 
-// ── FIXED: Added /v1 prefix ──
-export const useLeaveBalances = (employee_id: number, year?: number) => {
-  return useQuery<LeaveBalance[]>({
+export const useLeaveBalances = (employee_id: number, year?: number) =>
+  useQuery<LeaveBalance[]>({
     queryKey: ['leave-balances', employee_id, year],
     queryFn: () =>
-      api.get('/v1/leave-balances', { params: { employee_id, year } })
-         .then((r) => Array.isArray(r.data) ? r.data : r.data?.data ?? []),
+      api
+        .get('/leave-balances', { params: { employee_id, year } })
+        .then((r) => (Array.isArray(r.data) ? r.data : r.data?.data ?? [])),
     enabled: !!employee_id,
   });
-};
 
-// ── FIXED: Added /v1 prefix ──
 export const useApplyLeave = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: ApplyLeavePayload) =>
-      api.post('/v1/leaves', data).then((r) => r.data),
+      api.post('/leaves', data).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [KEY] });
-      toast.success('Leave application submitted');
+      toast.success('Leave application submitted — awaiting team lead review');
     },
     onError: (error: any) => {
-      const msg = error?.response?.data?.errors
-        ? Object.values(error.response.data.errors).flat()[0]
-        : error?.response?.data?.message || 'Failed to apply leave';
+      const msg =
+        error?.response?.data?.errors
+          ? Object.values(error.response.data.errors).flat()[0]
+          : error?.response?.data?.message || 'Failed to apply leave';
       toast.error(msg as string);
     },
   });
 };
 
-// ── FIXED: Added /v1 prefix ──
-export const useApproveLeave = () => {
+// ── Team Lead Approve ──────────────────────────────────────────
+export const useTeamLeadApprove = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) =>
-      api.patch(`/v1/leaves/${id}/approve`).then((r) => r.data),
+      api.patch(`/leaves/${id}/team-lead-approve`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [KEY] });
-      toast.success('Leave approved');
+      toast.success('Team lead approved — awaiting HR/Admin final approval');
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || 'Failed to approve');
@@ -100,12 +96,43 @@ export const useApproveLeave = () => {
   });
 };
 
-// ── FIXED: Added /v1 prefix ──
+// ── Team Lead Reject ───────────────────────────────────────────
+export const useTeamLeadReject = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, rejection_reason }: { id: number; rejection_reason: string }) =>
+      api.patch(`/leaves/${id}/team-lead-reject`, { rejection_reason }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [KEY] });
+      toast.success('Team lead rejected the leave');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to reject');
+    },
+  });
+};
+
+// ── HR/Admin Final Approve (can override TL rejection) ─────────
+export const useApproveLeave = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.patch(`/leaves/${id}/approve`).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [KEY] });
+      toast.success(data?.message ?? 'Leave approved');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to approve');
+    },
+  });
+};
+
 export const useRejectLeave = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, rejection_reason }: { id: number; rejection_reason: string }) =>
-      api.patch(`/v1/leaves/${id}/reject`, { rejection_reason }).then((r) => r.data),
+      api.patch(`/leaves/${id}/reject`, { rejection_reason }).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [KEY] });
       toast.success('Leave rejected');
@@ -116,12 +143,11 @@ export const useRejectLeave = () => {
   });
 };
 
-// ── FIXED: Added /v1 prefix ──
 export const useDeleteLeave = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) =>
-      api.delete(`/v1/leaves/${id}`).then((r) => r.data),
+      api.delete(`/leaves/${id}`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [KEY] });
       toast.success('Leave deleted');

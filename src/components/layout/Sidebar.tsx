@@ -4,21 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard,
-  Users,
-  Building2,
-  Briefcase,
-  Clock,
-  Calendar,
-  IndianRupee,
-  UserPlus,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  UserCircle,
+  LayoutDashboard, Users, Building2, Briefcase, Clock,
+  Calendar, IndianRupee, UserPlus, Settings, ChevronLeft,
+  ChevronRight, UserCircle, Network, Cake, Quote, UserCheck,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { resolveRoleTier } from '@/hooks/useAuth';
 
 const navItems = [
   {
@@ -61,7 +53,31 @@ const navItems = [
     label: 'Payroll',
     href: '/payroll',
     icon: IndianRupee,
-    roles: ['admin', 'hr', 'employee'],
+    roles: ['admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+  },
+  {
+    label: 'Organization',
+    href: '/organization',
+    icon: Network,
+    roles: ['admin', 'hr', 'manager', 'team_lead', 'employee'],
+  },
+  {
+    label: 'Onboarding',
+    href: '/onboarding',
+    icon: UserCheck,
+    roles: ['admin', 'hr', 'manager'],
+  },
+  {
+    label: 'Events',
+    href: '/events',
+    icon: Cake,
+    roles: ['admin', 'hr', 'manager', 'team_lead', 'employee'],
+  },
+  {
+    label: 'Quotes',
+    href: '/quotes',
+    icon: Quote,
+    roles: ['admin', 'hr'],
   },
   {
     label: 'Recruitment',
@@ -79,22 +95,35 @@ const navItems = [
 
 const WORKSPACE_ROLES = ['manager', 'team_lead', 'sales_manager', 'employee'];
 
+const ROLE_LABELS: Record<string, string> = {
+  admin:         'Admin',
+  super_admin:   'Super Admin',
+  hr:            'HR',
+  hr_manager:    'HR Manager',
+  manager:       'Manager',
+  team_lead:     'Team Lead',
+  sales_manager: 'Sales Manager',
+  employee:      'Employee',
+};
+
 export function Sidebar({ userRole }: { userRole: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuthStore();
-
-  // Defer role resolution to client only to avoid SSR/client mismatch
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  const role = userRole?.toLowerCase();
-  const isWorkspaceRole = mounted && WORKSPACE_ROLES.includes(role);
+  // resolveRoleTier checks Spatie roles[] → role column → designation — single source of truth
+  const tier = mounted
+    ? resolveRoleTier(user)
+    : (userRole?.toLowerCase().replace(/[\s-]/g, '_') || 'employee');
 
-  const filtered = navItems.filter((item) => item.roles.includes(role));
+  const isWorkspaceRole = mounted && WORKSPACE_ROLES.includes(tier);
+  const filtered = navItems.filter((item) => item.roles.includes(tier));
+  const roleLabel = ROLE_LABELS[tier] ?? tier;
 
   const initials = user?.name
-    ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
 
   return (
@@ -105,12 +134,7 @@ export function Sidebar({ userRole }: { userRole: string }) {
       )}
     >
       {/* Logo */}
-      <div
-        className={cn(
-          'flex items-center h-16 px-4 border-b border-slate-700/50 flex-shrink-0',
-          collapsed ? 'justify-center' : 'gap-3'
-        )}
-      >
+      <div className={cn('flex items-center h-16 px-4 border-b border-slate-700/50 flex-shrink-0', collapsed ? 'justify-center' : 'gap-3')}>
         <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
           <Building2 size={16} className="text-white" />
         </div>
@@ -126,9 +150,7 @@ export function Sidebar({ userRole }: { userRole: string }) {
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {filtered.map((item) => {
           const href =
-            item.label === 'Dashboard' && isWorkspaceRole
-              ? '/workspace'
-              : item.href;
+            item.label === 'Dashboard' && isWorkspaceRole ? '/workspace' : item.href;
 
           const isActive =
             pathname === href ||
@@ -179,7 +201,7 @@ export function Sidebar({ userRole }: { userRole: string }) {
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-white truncate">{user?.name || 'User'}</p>
-              <p className="text-xs text-slate-400 capitalize truncate">{role}</p>
+              <p className="text-xs text-slate-400 capitalize truncate">{roleLabel}</p>
             </div>
           )}
           {!collapsed && (

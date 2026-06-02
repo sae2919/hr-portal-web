@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuthStore } from '@/store/authStore';
-import { useLogout } from '@/hooks/useAuth';
+import { useLogout, resolveRoleTier } from '@/hooks/useAuth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,33 +12,47 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Bell, LogOut, User, Settings, Loader2 } from 'lucide-react';
+import { LogOut, User, Settings, Loader2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import { NotificationPanel } from '@/components/notifications/NotificationPanel';
 
-function getPageTitle(pathname: string, role?: string): string {
+const ROLE_LABELS: Record<string, string> = {
+  admin:         'Admin',
+  super_admin:   'Super Admin',
+  hr:            'HR',
+  hr_manager:    'HR Manager',
+  manager:       'Manager',
+  team_lead:     'Team Lead',
+  sales_manager: 'Sales Manager',
+  employee:      'Employee',
+};
+
+function getPageTitle(pathname: string, tier: string): string {
   const map: Record<string, string> = {
-    '/dashboard': 'Dashboard',
-    '/workspace':  'Dashboard',
-    '/employees':  'Employees',
-    '/departments': 'Departments',
+    '/dashboard':    'Dashboard',
+    '/workspace':    'Dashboard',
+    '/employees':    'Employees',
+    '/departments':  'Departments',
     '/designations': 'Designations',
-    '/attendance': 'Attendance',
-    '/leaves':     'Leave Management',
-    '/payroll':    'Payroll',
-    '/recruitment': 'Recruitment',
-    '/settings':   'Settings',
+    '/attendance':   'Attendance',
+    '/leaves':       'Leave Management',
+    '/payroll':      'Payroll',
+    '/recruitment':  'Recruitment',
+    '/settings':     'Settings',
+    '/events':       'Events',
+    '/quotes':       'Quotes',
+    '/onboarding':   'Onboarding',
+    '/organization': 'Organization',
   };
 
   for (const key of Object.keys(map)) {
     if (pathname.startsWith(key)) return map[key];
   }
 
-  // Fallback: role-aware portal name
-  if (!role) return 'Employee Portal';
-  if (['admin', 'hr'].includes(role))                       return 'HR Portal';
-  if (role === 'manager')                                    return 'Manager Portal';
-  if (role === 'team_lead')                                  return 'Team Lead Portal';
-  if (role === 'sales_manager')                              return 'Sales Manager Portal';
+  if (tier === 'admin' || tier === 'hr')  return 'HR Portal';
+  if (tier === 'manager')                 return 'Manager Portal';
+  if (tier === 'team_lead')               return 'Team Lead Portal';
+  if (tier === 'sales_manager')           return 'Sales Manager Portal';
   return 'Employee Portal';
 }
 
@@ -56,20 +70,24 @@ export function Header() {
   const { mutate: logout, isPending } = useLogout();
   const pathname = usePathname();
 
+  // Single source of truth — same as sidebar and workspace page
+  const tier = resolveRoleTier(user);
+  const roleLabel = ROLE_LABELS[tier] ?? 'Employee';
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0">
 
       {/* Page Title */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-          {getPageTitle(pathname, user?.role)}
+          {getPageTitle(pathname, tier)}
         </h1>
         <p className="text-xs text-slate-400 mt-0.5">
           {new Date().toLocaleDateString('en-US', {
             weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
+            year:    'numeric',
+            month:   'long',
+            day:     'numeric',
           })}
         </p>
       </div>
@@ -78,10 +96,7 @@ export function Header() {
       <div className="flex items-center gap-3">
 
         {/* Notification Bell */}
-        <button className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
-          <Bell size={18} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
+        <NotificationPanel />
 
         {/* User Dropdown */}
         <DropdownMenu>
@@ -96,8 +111,8 @@ export function Header() {
                 <p className="text-sm font-medium text-slate-700 leading-none">
                   {user?.name ?? 'User'}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5 capitalize">
-                  {user?.role ?? 'employee'}
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {roleLabel}
                 </p>
               </div>
             </button>
@@ -106,11 +121,9 @@ export function Header() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <p className="font-medium text-sm">{user?.name}</p>
-              <p className="text-xs text-slate-400 font-normal mt-0.5">
-                {user?.email}
-              </p>
-              <Badge variant="secondary" className="mt-1.5 text-xs capitalize">
-                {user?.role}
+              <p className="text-xs text-slate-400 font-normal mt-0.5">{user?.email}</p>
+              <Badge variant="secondary" className="mt-1.5 text-xs">
+                {roleLabel}
               </Badge>
             </DropdownMenuLabel>
 

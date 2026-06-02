@@ -8,6 +8,7 @@ import { Employee } from '@/types/employee';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Department } from '@/types/department';
 import { 
   Plus, Search, Pencil, Trash2, Loader2, Users, 
   Eye, Mail, AlertTriangle, X 
@@ -161,7 +162,7 @@ export default function EmployeesPage() {
           className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white text-slate-700 font-medium"
         >
           <option value="">All Departments</option>
-          {departments.map((d) => (
+         {departments.map((d: Department) => (
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>

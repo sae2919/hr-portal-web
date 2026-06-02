@@ -34,6 +34,13 @@ export interface Leave {
   rejection_reason: string | null;
   approved_by: number | null;
   approved_at: string | null;
+  team_lead_status: 'pending' | 'approved' | 'rejected' | null;
+  team_lead_rejection_reason: string | null;
+  team_lead_acted_at: string | null;
+  team_lead: {
+    id: number;
+    name: string;
+  } | null;
   created_at: string;
 }
 

@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthState>()(
         if (!currentUser) return false;
         
         // Check for permission arrays structural fallbacks safely
-        const permissions = currentUser.permissions || currentUser.data?.permissions || [];
+        const permissions = currentUser.permissions || [];
         return permissions.includes(permission);
       },
 

@@ -1,29 +1,55 @@
 import axios, { AxiosError } from 'axios';
 import { useAuthStore } from '@/store/authStore';
 
-const parseData = (data: any) => {
-  if (typeof data === 'string') {
+const getToken = (): string | null => {
+  // Try Zustand store first
+  const storeToken = useAuthStore.getState().token;
+  if (storeToken) return storeToken;
+
+  // Fallback to localStorage
+  if (typeof window !== 'undefined') {
     try {
-      const match = data.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (match) return JSON.parse(match[0]);
-    } catch (e) {}
+      const persisted = localStorage.getItem('hr-auth');
+      if (persisted) {
+        const parsed = JSON.parse(persisted);
+        return parsed?.state?.token || parsed?.token || null;
+      }
+    } catch {
+      // ignore
+    }
   }
-  return data;
+  return null;
+};
+
+const getBaseURL = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // Dynamically resolve backend hostname to match the frontend (localhost vs 127.0.0.1) in the browser.
+  // This automatically resolves IPv4 vs IPv6 loopback binding mismatches on Windows.
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    return `http://${hostname}:8000/api/v1`;
+  }
+  
+  return 'http://127.0.0.1:8000/api/v1';
 };
 
 const api = axios.create({
-  // FIXED: Keep the base URL clean. We will manage versioning prefixes inside the routes definitions cleanly.
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
+  withCredentials: true,
+  timeout: 30000,
 });
 
+// Request interceptor - add token
 api.interceptors.request.use(
   (config) => {
-    // FIXED: Instead of hitting slower local storage lookups, read directly from active store memory state
-    const token = useAuthStore.getState().token;
+    const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,19 +58,37 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Response interceptor - handle errors
 api.interceptors.response.use(
-  (response) => {
-    response.data = parseData(response.data);
-    return response;
-  },
+  (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        // FIXED: Call the centralized state cleaner instead of loose manual deletions
-        useAuthStore.getState().clearAuth();
+    // Network error (no response)
+    if (!error.response) {
+      console.warn('Network unavailable:', error.message);
+      // Modify the message on the existing AxiosError object instead of rejecting with a new raw Error.
+      // This prevents the Next.js Turbopack development overlay from popping up for caught errors.
+      error.message = 'Unable to connect to server. Please check if backend is running.';
+      return Promise.reject(error);
+    }
+
+    // 401 Unauthorized - redirect to login
+    if (error.response.status === 401) {
+      useAuthStore.getState().clearAuth();
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
     }
+
+    // Log errors in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('API Error:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+    }
+
     return Promise.reject(error);
   }
 );
