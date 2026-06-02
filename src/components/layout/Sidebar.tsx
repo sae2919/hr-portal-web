@@ -1,5 +1,5 @@
 'use client';
-
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -17,79 +17,79 @@ const navItems = [
     label: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin','admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
   },
   {
     label: 'Employees',
     href: '/employees',
     icon: Users,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'sales_manager'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager'],
   },
   {
     label: 'Departments',
     href: '/departments',
     icon: Building2,
-    roles: ['admin', 'hr'],
+    roles: ['super_admin','super admin', 'admin', 'hr'],
   },
   {
     label: 'Designations',
     href: '/designations',
     icon: Briefcase,
-    roles: ['admin', 'hr'],
+    roles: ['super_admin','super admin', 'admin', 'hr'],
   },
   {
     label: 'Attendance',
     href: '/attendance',
     icon: Clock,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
   },
   {
     label: 'Leaves',
     href: '/leaves',
     icon: Calendar,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
   },
   {
     label: 'Payroll',
     href: '/payroll',
     icon: IndianRupee,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
   },
   {
     label: 'Organization',
     href: '/organization',
     icon: Network,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'employee'],
   },
   {
     label: 'Onboarding',
     href: '/onboarding',
     icon: UserCheck,
-    roles: ['admin', 'hr', 'manager'],
+    roles: ['super_admin', 'admin', 'hr', 'manager'],
   },
   {
     label: 'Events',
     href: '/events',
     icon: Cake,
-    roles: ['admin', 'hr', 'manager', 'team_lead', 'employee'],
+    roles: ['super_admin', 'admin', 'hr', 'manager', 'team_lead', 'employee'],
   },
   {
     label: 'Quotes',
     href: '/quotes',
     icon: Quote,
-    roles: ['admin', 'hr'],
+    roles: ['super_admin','super admin', 'admin', 'hr'],
   },
   {
     label: 'Recruitment',
     href: '/recruitment',
     icon: UserPlus,
-    roles: ['admin', 'hr', 'sales_manager'],
+    roles: ['super_admin', 'admin', 'hr', 'sales_manager'],
   },
   {
     label: 'Settings',
     href: '/settings',
     icon: Settings,
-    roles: ['admin'],
+    roles: ['super_admin','super admin', 'admin'],
   },
 ];
 
@@ -134,17 +134,30 @@ export function Sidebar({ userRole }: { userRole: string }) {
       )}
     >
       {/* Logo */}
-      <div className={cn('flex items-center h-16 px-4 border-b border-slate-700/50 flex-shrink-0', collapsed ? 'justify-center' : 'gap-3')}>
-        <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <Building2 size={16} className="text-white" />
-        </div>
-        {!collapsed && (
-          <div>
-            <p className="text-sm font-bold text-white">HR Portal</p>
-            <p className="text-xs text-slate-400">Management System</p>
-          </div>
-        )}
-      </div>
+<div
+  className={cn(
+    'flex items-center h-16 px-4 border-b border-slate-700/50',
+    collapsed ? 'justify-center' : 'justify-start'
+  )}
+>
+  <img
+    src="/logo.png"
+    alt="Techsprout"
+    className={collapsed ? 'h-10 w-10 object-contain' : 'h-10 w-auto object-contain'}
+  />
+
+
+  {!collapsed && (
+    <div>
+      <p className="text-sm font-bold text-white">
+        Techsprout
+      </p>
+      <p className="text-xs text-slate-400">
+        HR Management System
+      </p>
+    </div>
+  )}
+</div>
 
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
@@ -186,32 +199,44 @@ export function Sidebar({ userRole }: { userRole: string }) {
       </button>
 
       {/* User profile footer */}
-      <div className={cn('border-t border-slate-700/50', collapsed ? 'p-2' : 'p-3')}>
-        <Link
-          href="/profile/edit"
-          title={collapsed ? 'Edit Profile' : undefined}
-          className={cn(
-            'flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-800 transition-colors group',
-            collapsed ? 'justify-center' : ''
-          )}
-        >
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {initials}
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">{user?.name || 'User'}</p>
-              <p className="text-xs text-slate-400 capitalize truncate">{roleLabel}</p>
-            </div>
-          )}
-          {!collapsed && (
-            <UserCircle size={14} className="text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
-          )}
-        </Link>
-        {!collapsed && (
-          <p className="text-xs text-slate-600 text-center mt-2">HR Portal v1.0</p>
-        )}
+<div className={cn('border-t border-slate-700/50', collapsed ? 'p-2' : 'p-3')}>
+  <Link
+    href="/profile/edit"
+    title={collapsed ? 'Edit Profile' : undefined}
+    className={cn(
+      'flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-800 transition-colors group',
+      collapsed ? 'justify-center' : ''
+    )}
+  >
+    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+      {initials}
+    </div>
+
+    {!collapsed && (
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-white truncate">
+          {user?.name || 'User'}
+        </p>
+        <p className="text-xs text-slate-400 capitalize truncate">
+          {roleLabel}
+        </p>
       </div>
+    )}
+
+    {!collapsed && (
+      <UserCircle
+        size={14}
+        className="text-slate-500 group-hover:text-slate-300 flex-shrink-0"
+      />
+    )}
+  </Link>
+
+  {!collapsed && (
+    <p className="text-xs text-slate-600 text-center mt-2">
+      Techsprout HRMS v1.0
+    </p>
+  )}
+</div>
     </aside>
   );
 }

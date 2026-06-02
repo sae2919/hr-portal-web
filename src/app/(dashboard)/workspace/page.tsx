@@ -433,7 +433,7 @@ export default function WorkspacePage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated || !token) return;
+    if (!isAuthenticated || !token || !user) return;
     // Admin/HR should not be here
     if (tier === 'admin' || tier === 'hr') {
       router.replace('/dashboard');
@@ -442,7 +442,7 @@ export default function WorkspacePage() {
     fetchWorkspaceData();
     loadDailyQuote();
     loadTodaySpecial();
-  }, [isAuthenticated, token, tier, router, fetchWorkspaceData, loadDailyQuote, loadTodaySpecial]);
+  }, [isAuthenticated, token, tier, user, router, fetchWorkspaceData, loadDailyQuote, loadTodaySpecial]);
 
   if (loading) {
     return (

@@ -22,17 +22,12 @@ const getToken = (): string | null => {
 };
 
 const getBaseURL = (): string => {
+  // Use environment variable if set
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
   
-  // Dynamically resolve backend hostname to match the frontend (localhost vs 127.0.0.1) in the browser.
-  // This automatically resolves IPv4 vs IPv6 loopback binding mismatches on Windows.
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    return `http://${hostname}:8000/api/v1`;
-  }
-  
+  // Fixed backend URL - use 127.0.0.1 consistently
   return 'http://127.0.0.1:8000/api/v1';
 };
 
@@ -65,8 +60,6 @@ api.interceptors.response.use(
     // Network error (no response)
     if (!error.response) {
       console.warn('Network unavailable:', error.message);
-      // Modify the message on the existing AxiosError object instead of rejecting with a new raw Error.
-      // This prevents the Next.js Turbopack development overlay from popping up for caught errors.
       error.message = 'Unable to connect to server. Please check if backend is running.';
       return Promise.reject(error);
     }

@@ -56,6 +56,7 @@ export const resolveRoleTier = (user: any): string => {
 
   // 3. Fallback: designation title
   const designation = (user.employee?.designation ?? '').toLowerCase();
+  if (designation.includes('ceo') || designation.includes('founder') || designation.includes('president') || designation.includes('co-founder') || designation.includes('co_founder')) return 'admin';
   if (MANAGER_DESIGNATIONS.some((d) => designation.includes(d))) return 'manager';
   if (TEAM_LEAD_DESIGNATIONS.some((d) => designation.includes(d))) return 'team_lead';
 

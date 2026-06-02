@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import BirthdayNotification from '@/components/events/BirthdayNotification';
 import { quoteService } from '@/services/quoteService';
 import { eventService } from '@/services/eventService';
+import { resolveRoleTier } from '@/hooks/useAuth';
 
 import {
   Users, Clock, Calendar, IndianRupee, TrendingUp, UserCheck,
@@ -38,6 +39,7 @@ const quickActions = [
 export default function DashboardPage() {
   const router = useRouter();
   const { user, token, isAuthenticated } = useAuthStore();
+  const tier = resolveRoleTier(user);
 
   const [stats, setStats] = useState<any>(fallbackStats);
   const [loading, setLoading] = useState(true);
@@ -95,12 +97,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isAuthenticated && token === null) { router.push('/login'); return; }
-    if (user?.role !== 'admin' && user?.role !== 'hr') { router.replace('/workspace'); return; }
+    if (!isAuthenticated || !user) return;
+    if (tier !== 'admin' && tier !== 'hr') { router.replace('/workspace'); return; }
     loadStats();
     loadDailyQuote();
     loadTodaySpecial();
     loadUpcomingEvents();
-  }, [loadStats, isAuthenticated, user, router, token]);
+  }, [loadStats, isAuthenticated, tier, user, router, token]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -125,7 +128,7 @@ export default function DashboardPage() {
     { label: 'Monthly Payroll', value: `₹${Number(stats.monthly_payroll || stats.total_payroll_ytd || 0).toLocaleString('en-IN')}`, icon: IndianRupee, light: 'bg-teal-50', text: 'text-teal-600' },
   ];
 
-  const filteredQuickActions = quickActions.filter(a => a.roles.includes(user?.role || ''));
+  const filteredQuickActions = quickActions.filter(a => a.roles.includes(tier));
   const hasTodaySpecial = todaySpecial.birthdays.length > 0 || todaySpecial.anniversaries.length > 0;
 
   return (

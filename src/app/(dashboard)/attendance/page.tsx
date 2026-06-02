@@ -1171,12 +1171,18 @@ export default function AttendancePage() {
 
   const { hasPermission, user } = useAuthStore();
   const tier = resolveRoleTier(user);
+  console.log('ROLE DEBUG', {
+  tier,
+  employee_id: user?.employee_id,
+  permissions: user?.permissions
+});
 
   const isSuperAdminOrHR = mounted && (
-    hasPermission('view all attendance') ||
-    tier === 'admin' ||
-    tier === 'hr'
-  );
+  hasPermission('view all attendance') ||
+  tier === 'super_admin' ||
+  tier === 'admin' ||
+  tier === 'hr'
+);
 
   const isTeamLeadOrManager = mounted && !isSuperAdminOrHR && (
     tier === 'team_lead' ||

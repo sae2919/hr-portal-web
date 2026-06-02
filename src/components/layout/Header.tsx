@@ -29,30 +29,34 @@ const ROLE_LABELS: Record<string, string> = {
 
 function getPageTitle(pathname: string, tier: string): string {
   const map: Record<string, string> = {
-    '/dashboard':    'Dashboard',
-    '/workspace':    'Dashboard',
-    '/employees':    'Employees',
-    '/departments':  'Departments',
+    '/dashboard': 'Dashboard',
+    '/workspace': 'Dashboard',
+    '/employees': 'Employees',
+    '/departments': 'Departments',
     '/designations': 'Designations',
-    '/attendance':   'Attendance',
-    '/leaves':       'Leave Management',
-    '/payroll':      'Payroll',
-    '/recruitment':  'Recruitment',
-    '/settings':     'Settings',
-    '/events':       'Events',
-    '/quotes':       'Quotes',
-    '/onboarding':   'Onboarding',
+    '/attendance': 'Attendance',
+    '/leaves': 'Leave Management',
+    '/payroll': 'Payroll',
+    '/recruitment': 'Recruitment',
+    '/settings': 'Settings',
+    '/events': 'Events',
+    '/quotes': 'Quotes',
+    '/onboarding': 'Onboarding',
     '/organization': 'Organization',
   };
 
   for (const key of Object.keys(map)) {
-    if (pathname.startsWith(key)) return map[key];
+    if (pathname.startsWith(key)) {
+      return map[key];
+    }
   }
 
-  if (tier === 'admin' || tier === 'hr')  return 'HR Portal';
-  if (tier === 'manager')                 return 'Manager Portal';
-  if (tier === 'team_lead')               return 'Team Lead Portal';
-  if (tier === 'sales_manager')           return 'Sales Manager Portal';
+  if (tier === 'super_admin')           return 'Super Admin Portal';
+  if (tier === 'admin' || tier === 'hr') return 'HR Portal';
+  if (tier === 'manager')               return 'Manager Portal';
+  if (tier === 'team_lead')             return 'Team Lead Portal';
+  if (tier === 'sales_manager')         return 'Sales Manager Portal';
+
   return 'Employee Portal';
 }
 
