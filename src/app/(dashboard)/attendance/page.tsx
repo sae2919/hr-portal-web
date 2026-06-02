@@ -984,19 +984,56 @@ function TeamCalendarTab({
                     </span>
 
                     {/* Leave Pills */}
-                    {cell.leaves.length > 0 && (
-                      <div className="mt-2 w-full space-y-1">
-                        <div className="w-full px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 text-[10px] font-bold text-blue-700 truncate shadow-sm flex items-center gap-1 group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors">
-                          <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
-                          {cell.leaves.length === 1
-                            ? cell.leaves[0].employee_name
-                            : `${cell.leaves.length} On Leave`}
+                    {(() => {
+                      if (cell.leaves.length === 0) return null;
+                      const compOffs = cell.leaves.filter((l: any) =>
+                        l.leave_type?.toLowerCase().includes('compensatory') ||
+                        l.leave_type?.toLowerCase().includes('comp')
+                      );
+                      const regularLeaves = cell.leaves.filter((l: any) =>
+                        !l.leave_type?.toLowerCase().includes('compensatory') &&
+                        !l.leave_type?.toLowerCase().includes('comp')
+                      );
+                      return (
+                        <div className="mt-2 w-full space-y-1">
+                          {compOffs.length > 0 && (
+                            <div className="w-full px-1.5 py-0.5 rounded bg-amber-50 border border-amber-100 text-[10px] font-bold text-amber-700 truncate shadow-sm flex items-center gap-1 group-hover:bg-amber-100 group-hover:text-amber-800 transition-colors animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span>
+                                {compOffs.length === 1
+                                  ? `${compOffs[0].employee_name} (Comp)`
+                                  : `${compOffs.length} Comp Offs`}
+                              </span>
+                            </div>
+                          )}
+                          {regularLeaves.length > 0 && (
+                            <div className="w-full px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 text-[10px] font-bold text-blue-700 truncate shadow-sm flex items-center gap-1 group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                              <span>
+                                {regularLeaves.length === 1
+                                  ? regularLeaves[0].employee_name
+                                  : `${regularLeaves.length} On Leave`}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </button>
                 );
               })}
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-slate-100 select-none">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
+                <span className="text-[11px] font-semibold text-slate-500">Regular Approved Leave</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
+                <span className="text-[11px] font-semibold text-slate-500">Compensatory Off (Comp Off)</span>
+              </div>
             </div>
           </div>
 
@@ -1036,40 +1073,49 @@ function TeamCalendarTab({
 
                 return (
                   <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                    {dayLeaves.map((leave) => (
-                      <div
-                        key={leave.leave_id}
-                        className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50/20 rounded-xl border border-blue-100/50 shadow-sm flex items-start gap-3 hover:shadow hover:scale-[1.01] transition-all group duration-200"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0 select-none group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                          {leave.employee_name.charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-700 truncate">{leave.employee_name}</p>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-[9px] font-bold text-blue-600 border border-blue-100/50">
-                              {leave.leave_type}
-                            </span>
-                            {isAdmin && (
-                              <span className="text-[9px] font-semibold text-slate-400">
-                                {leave.department}
-                              </span>
-                            )}
+                    {dayLeaves.map((leave) => {
+                      const isComp = leave.leave_type?.toLowerCase().includes('compensatory') || leave.leave_type?.toLowerCase().includes('comp');
+                      return (
+                        <div
+                          key={leave.leave_id}
+                          className={`p-3 bg-gradient-to-br rounded-xl border shadow-sm flex items-start gap-3 hover:shadow hover:scale-[1.01] transition-all group duration-200 ${
+                            isComp ? 'from-amber-50 to-orange-50/20 border-amber-100/50' : 'from-blue-50 to-indigo-50/20 border-blue-100/50'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 select-none transition-colors ${
+                            isComp ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-600 group-hover:text-white' : 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'
+                          }`}>
+                            {leave.employee_name.charAt(0)}
                           </div>
-                          <p className="text-[10px] text-slate-400 font-semibold mt-2 font-mono">
-                            {new Date(leave.start_date + 'T00:00:00').toLocaleDateString('en-IN', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}{' '}
-                            -{' '}
-                            {new Date(leave.end_date + 'T00:00:00').toLocaleDateString('en-IN', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-700 truncate">{leave.employee_name}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                isComp ? 'bg-amber-50 text-amber-600 border-amber-100/50' : 'bg-blue-50 text-blue-600 border-blue-100/50'
+                              }`}>
+                                {leave.leave_type}
+                              </span>
+                              {isAdmin && (
+                                <span className="text-[9px] font-semibold text-slate-400">
+                                  {leave.department}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-2 font-mono">
+                              {new Date(leave.start_date + 'T00:00:00').toLocaleDateString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}{' '}
+                              -{' '}
+                              {new Date(leave.end_date + 'T00:00:00').toLocaleDateString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -1100,17 +1146,21 @@ function TeamCalendarTab({
             </div>
           ) : (
             <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto pr-1">
-              {filteredLeaves.map((leave) => (
-                <div
-                  key={leave.leave_id}
-                  className="flex items-center justify-between py-3 hover:bg-slate-50/50 px-2 rounded-xl transition-all text-sm group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 font-bold text-xs flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                      {leave.employee_name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-700 text-xs">{leave.employee_name}</p>
+              {filteredLeaves.map((leave) => {
+                const isComp = leave.leave_type?.toLowerCase().includes('compensatory') || leave.leave_type?.toLowerCase().includes('comp');
+                return (
+                  <div
+                    key={leave.leave_id}
+                    className="flex items-center justify-between py-3 hover:bg-slate-50/50 px-2 rounded-xl transition-all text-sm group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center transition-all ${
+                        isComp ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
+                      }`}>
+                        {leave.employee_name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-700 text-xs">{leave.employee_name}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         {leave.department} • {leave.leave_type}
                       </p>
@@ -1130,7 +1180,8 @@ function TeamCalendarTab({
                     })}
                   </span>
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </div>

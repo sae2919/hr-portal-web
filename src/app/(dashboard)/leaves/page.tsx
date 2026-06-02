@@ -242,7 +242,7 @@ export default function LeavesPage() {
   const [applyOpen, setApplyOpen]     = useState(false);
   const [rejectModal, setRejectModal] = useState<{ leave: Leave; mode: 'hr' | 'teamlead' } | null>(null);
   const [mounted, setMounted]         = useState(false);
-  const [tab,setTab] = useState('leaves');
+  const [tab, setTab] = useState('my_leaves');
 
   const { hasPermission, user } = useAuthStore();
   useEffect(() => setMounted(true), []);
@@ -263,10 +263,13 @@ export default function LeavesPage() {
     department_id:    filterDept ? Number(filterDept) : undefined,
     leave_type_id:    filterType ? Number(filterType) : undefined,
     team_lead_status: filterTL || undefined,
-    employee_id:      isAdmin || isTeamLead ? undefined : user?.employee_id ?? undefined,
+    employee_id:      (isAdmin || isTeamLead) && tab === 'team_leaves' ? undefined : (user?.employee_id ?? undefined),
   });
 
-  const leaves = Array.isArray(leavesResponse) ? leavesResponse : leavesResponse?.data ?? [];
+  let leaves = Array.isArray(leavesResponse) ? leavesResponse : leavesResponse?.data ?? [];
+  if (mounted && (isAdmin || isTeamLead) && tab === 'team_leaves') {
+    leaves = leaves.filter((l) => l.employee_id !== user?.employee_id);
+  }
   const meta   = (!Array.isArray(leavesResponse) && leavesResponse?.meta) ? leavesResponse.meta : null;
 
   const { data: leaveTypes = [] }     = useLeaveTypes();
@@ -318,6 +321,40 @@ export default function LeavesPage() {
           </div>
         ))}
       </div>
+
+      {/* Navigation Tabs */}
+      {(isAdmin || isTeamLead) && (
+        <div className="flex items-center border-b border-slate-100 gap-6 pb-1">
+          <button
+            onClick={() => {
+              setTab('my_leaves');
+              setPage(1);
+            }}
+            className={`relative pb-3 text-sm font-semibold transition-all duration-300 hover:text-slate-900 ${
+              tab === 'my_leaves' ? 'text-blue-600' : 'text-slate-400'
+            }`}
+          >
+            My Leaves
+            {tab === 'my_leaves' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full animate-in fade-in slide-in-from-bottom-1 duration-300" />
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setTab('team_leaves');
+              setPage(1);
+            }}
+            className={`relative pb-3 text-sm font-semibold transition-all duration-300 hover:text-slate-900 ${
+              tab === 'team_leaves' ? 'text-blue-600' : 'text-slate-400'
+            }`}
+          >
+            {isAdmin ? 'Company Leaves' : 'Team Leaves'}
+            {tab === 'team_leaves' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full animate-in fade-in slide-in-from-bottom-1 duration-300" />
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -469,7 +506,7 @@ export default function LeavesPage() {
                       <div className="flex items-center justify-end gap-1">
 
                         {/* ── Team Lead buttons (TL + Admin) ── */}
-                        {canTLApprove && overallPend && tlStatus === 'pending' && (
+                        {canTLApprove && overallPend && tlStatus === 'pending' && leave.employee_id !== user?.employee_id && (
                           <button
                             onClick={() => tlApprove(leave.id)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
@@ -478,7 +515,7 @@ export default function LeavesPage() {
                             <Check size={14} />
                           </button>
                         )}
-                        {canTLReject && overallPend && tlStatus === 'pending' && (
+                        {canTLReject && overallPend && tlStatus === 'pending' && leave.employee_id !== user?.employee_id && (
                           <button
                             onClick={() => setRejectModal({ leave, mode: 'teamlead' })}
                             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-orange-50 text-slate-400 hover:text-orange-500 transition-colors"
@@ -492,7 +529,7 @@ export default function LeavesPage() {
                             - shown when TL approved (normal flow)
                             - OR when TL rejected (override flow) — only for HR/Admin
                         ── */}
-                        {canHRApprove && leave.status !== 'approved' && (tlApproved || tlRejected) && (
+                        {canHRApprove && leave.status !== 'approved' && (tlApproved || tlRejected) && leave.employee_id !== user?.employee_id && (
                           <button
                             onClick={() => hrApprove(leave.id)}
                             className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
@@ -507,7 +544,7 @@ export default function LeavesPage() {
                         )}
 
                         {/* ── HR reject ── */}
-                        {canHRReject && leave.status === 'pending' && tlApproved && (
+                        {canHRReject && leave.status === 'pending' && tlApproved && leave.employee_id !== user?.employee_id && (
                           <button
                             onClick={() => setRejectModal({ leave, mode: 'hr' })}
                             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"

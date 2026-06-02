@@ -11,6 +11,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { resolveRoleTier } from '@/hooks/useAuth';
+import api from '@/lib/api';
 
 const navItems = [
   {
@@ -113,6 +114,39 @@ export function Sidebar({ userRole }: { userRole: string }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  const [branding, setBranding] = useState({
+    name: 'Techsprout',
+    logo: '/logo.png',
+  });
+
+  useEffect(() => {
+    // 1. Instantly load from localStorage if available
+    const cachedName = localStorage.getItem('company_name');
+    const cachedLogo = localStorage.getItem('company_logo');
+    if (cachedName || cachedLogo) {
+      setBranding({
+        name: cachedName || 'Techsprout',
+        logo: cachedLogo || '/logo.png',
+      });
+    }
+
+    // 2. Fetch fresh settings in background
+    (async () => {
+      try {
+        const res = await api.get('/settings');
+        const data = res.data;
+        const name = data.company_name || 'Techsprout';
+        const logo = data.company_logo || '/logo.png';
+        
+        setBranding({ name, logo });
+        localStorage.setItem('company_name', name);
+        localStorage.setItem('company_logo', logo);
+      } catch (err) {
+        console.error('Failed to load branding in Sidebar:', err);
+      }
+    })();
+  }, []);
+
   // resolveRoleTier checks Spatie roles[] → role column → designation — single source of truth
   const tier = mounted
     ? resolveRoleTier(user)
@@ -134,30 +168,29 @@ export function Sidebar({ userRole }: { userRole: string }) {
       )}
     >
       {/* Logo */}
-<div
-  className={cn(
-    'flex items-center h-16 px-4 border-b border-slate-700/50',
-    collapsed ? 'justify-center' : 'justify-start'
-  )}
->
-  <img
-    src="/logo.png"
-    alt="Techsprout"
-    className={collapsed ? 'h-10 w-10 object-contain' : 'h-10 w-auto object-contain'}
-  />
+      <div
+        className={cn(
+          'flex items-center gap-3 h-16 px-4 border-b border-slate-700/50',
+          collapsed ? 'justify-center' : 'justify-start'
+        )}
+      >
+        <img
+          src={branding.logo}
+          alt={branding.name}
+          className={collapsed ? 'h-10 w-10 object-contain' : 'h-10 w-10 object-contain rounded-lg'}
+        />
 
-
-  {!collapsed && (
-    <div>
-      <p className="text-sm font-bold text-white">
-        Techsprout
-      </p>
-      <p className="text-xs text-slate-400">
-        HR Management System
-      </p>
-    </div>
-  )}
-</div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white truncate">
+              {branding.name}
+            </p>
+            <p className="text-[10px] text-slate-400 tracking-wider uppercase font-semibold">
+              HRMS
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
@@ -232,8 +265,8 @@ export function Sidebar({ userRole }: { userRole: string }) {
   </Link>
 
   {!collapsed && (
-    <p className="text-xs text-slate-600 text-center mt-2">
-      Techsprout HRMS v1.0
+    <p className="text-[10px] text-slate-600 text-center mt-2 truncate px-2">
+      {branding.name} HRMS v1.0
     </p>
   )}
 </div>

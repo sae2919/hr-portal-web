@@ -34,9 +34,9 @@ export default function OrganizationPage() {
   const role = user?.role?.toLowerCase();
   
   // Permission definitions
-  const canEditOrgChart = ['admin', 'hr'].includes(role || '');
+  const canEditOrgChart = ['admin', 'hr', 'super_admin', 'super admin'].includes(role || '');
   const canViewOrgChart = true; // Everyone can VIEW organization chart
-  const canEditTeam = ['admin', 'hr', 'manager', 'team_lead'].includes(role || '');
+  const canEditTeam = ['admin', 'hr', 'manager', 'team_lead', 'super_admin', 'super admin'].includes(role || '');
   const canViewTeam = true; // Everyone can VIEW team structure
   const canViewChain = true; // Everyone can see their reporting chain
 

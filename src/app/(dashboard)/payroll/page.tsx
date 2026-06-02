@@ -69,8 +69,8 @@ function amountInWords(net: number): string {
 }
 
 // ─── Payslip Print Modal ──────────────────────────────────────────────────────
-function PayslipModal({ payroll, items, onClose }: {
-  payroll: Payroll; items: PayrollItem[]; onClose: () => void;
+function PayslipModal({ payroll, items, companyName, onClose }: {
+  payroll: Payroll; items: PayrollItem[]; companyName: string; onClose: () => void;
 }) {
   const earnings   = items.filter(i => i.type === 'earning');
   const deductions = items.filter(i => i.type === 'deduction');
@@ -132,7 +132,7 @@ function PayslipModal({ payroll, items, onClose }: {
         </div>
         <div id="payslip-print-area" className="p-6 text-[11px] text-gray-800 font-[Arial,sans-serif]">
           <div className="header border-b-2 border-gray-900 pb-3 mb-4 text-center">
-            <h1 className="text-base font-bold">Techsprout AI Labs</h1>
+            <h1 className="text-base font-bold">{companyName || 'Techsprout AI Labs'}</h1>
             <p className="text-[10px] text-gray-500 mt-0.5">
               8-2-293/82/A/787/1/4F/1, Road No36, 4th Floor, Jubilee Hills, Hyderabad, Shaikpet, Telangana, India, 500033
             </p>
@@ -534,6 +534,12 @@ function UniversalFilterBar({ filters, employees, departments, isAdmin, onFilter
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<'register' | 'requests'>('register');
+  const [companyName, setCompanyName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('company_name') || 'Techsprout AI Labs';
+    }
+    return 'Techsprout AI Labs';
+  });
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [requests, setRequests] = useState<PayslipRequest[]>([]);
   const [page, setPage] = useState(1);
@@ -618,6 +624,12 @@ export default function PayrollPage() {
       const pct = parseFloat(r.data?.pf_percentage ?? '0');
       setGlobalPfPct(pct);
       setGenForm(f => ({ ...f, pf_percentage: pct }));
+      
+      const name = r.data?.company_name;
+      if (name) {
+        setCompanyName(name);
+        localStorage.setItem('company_name', name);
+      }
     }).catch(() => {});
     
     // Load employees and departments for admin filters
@@ -1154,7 +1166,14 @@ export default function PayrollPage() {
       )}
 
       {/* Payslip Modal */}
-      {payslipModal && <PayslipModal payroll={payslipModal.payroll} items={payslipModal.items} onClose={() => setPayslipModal(null)} />}
+      {payslipModal && (
+        <PayslipModal
+          payroll={payslipModal.payroll}
+          items={payslipModal.items}
+          companyName={companyName}
+          onClose={() => setPayslipModal(null)}
+        />
+      )}
     </div>
   );
 }

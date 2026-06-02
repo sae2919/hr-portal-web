@@ -9,6 +9,8 @@ interface CompanySettings {
   pf_enabled: boolean;
   pt_enabled: boolean;
   pf_percentage: number;
+  company_name?: string;
+  company_logo?: string;
 }
 
 const PF_PRESETS = [8, 10, 12];
@@ -19,25 +21,39 @@ export default function SettingsPage() {
     pf_enabled: true,
     pt_enabled: true,
     pf_percentage: 12,
+    company_name: 'Techsprout',
+    company_logo: '/logo.png',
   });
   const [saved, setSaved] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>('');
 
   const isDirty =
     saved !== null &&
     (settings.pf_enabled !== saved.pf_enabled ||
       settings.pt_enabled !== saved.pt_enabled ||
-      settings.pf_percentage !== saved.pf_percentage);
+      settings.pf_percentage !== saved.pf_percentage ||
+      settings.company_name !== saved.company_name ||
+      logoFile !== null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
         const res = await api.get('/settings');
-        const data: CompanySettings = res.data;
-        setSettings(data);
-        setSaved(data);
+        const data = res.data;
+        const normalized = {
+          pf_enabled: String(data.pf_enabled) === '1' || data.pf_enabled === true,
+          pt_enabled: String(data.pt_enabled) === '1' || data.pt_enabled === true,
+          pf_percentage: Number(data.pf_percentage) || 12,
+          company_name: data.company_name || 'Techsprout',
+          company_logo: data.company_logo || '/logo.png',
+        };
+        setSettings(normalized);
+        setSaved(normalized);
+        setLogoPreview(normalized.company_logo);
       } catch {
         toast.error('Failed to load settings.');
       } finally {
@@ -50,23 +66,67 @@ export default function SettingsPage() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const res = await api.put('/settings', settings);
-      const data: CompanySettings = res.data;
-      setSettings(data);
-      setSaved(data);
-      toast.success('Settings saved successfully.');
+      const formData = new FormData();
+      formData.append('_method', 'PUT'); // Laravel request compatibility
+      formData.append('pf_enabled', settings.pf_enabled ? '1' : '0');
+      formData.append('pt_enabled', settings.pt_enabled ? '1' : '0');
+      formData.append('pf_percentage', String(settings.pf_percentage));
+      formData.append('company_name', settings.company_name || '');
+      if (logoFile) {
+        formData.append('company_logo', logoFile);
+      }
+
+      await api.post('/settings', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const refreshed = await api.get('/settings');
+      const data = refreshed.data;
+      const normalized = {
+        pf_enabled: String(data.pf_enabled) === '1' || data.pf_enabled === true,
+        pt_enabled: String(data.pt_enabled) === '1' || data.pt_enabled === true,
+        pf_percentage: Number(data.pf_percentage) || 12,
+        company_name: data.company_name || 'Techsprout',
+        company_logo: data.company_logo || '/logo.png',
+      };
+      setSettings(normalized);
+      setSaved(normalized);
+      setLogoPreview(normalized.company_logo);
+      setLogoFile(null);
+
+      localStorage.setItem('company_name', normalized.company_name);
+      localStorage.setItem('company_logo', normalized.company_logo);
+
+      toast.success('Branding and settings saved successfully.');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch {
       toast.error('Failed to save settings.');
     } finally {
       setSaving(false);
     }
-  }, [settings]);
+  }, [settings, logoFile]);
 
   // ── Helpers ────────────────────────────────────────────────────────────
   const pfAmount = (basic: number) =>
     settings.pf_enabled
       ? `₹${((basic * settings.pf_percentage) / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
       : '—';
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error('File size must be under 2MB.');
+        return;
+      }
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
+  };
 
   // ── Loading skeleton ───────────────────────────────────────────────────
   if (loading) {
@@ -94,6 +154,74 @@ export default function SettingsPage() {
           You have unsaved changes.
         </div>
       )}
+
+      {/* ── Company Branding card ── */}
+      <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="font-semibold text-slate-800 text-base">Company Branding</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Customize your company's name and logo shown in the system</p>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Company Name */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Company Name</label>
+            <input
+              type="text"
+              value={settings.company_name || ''}
+              onChange={e => setSettings(s => ({ ...s, company_name: e.target.value }))}
+              placeholder="e.g. Techsprout"
+              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:border-slate-400 transition-all"
+            />
+          </div>
+
+          {/* Company Logo */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Company Logo</label>
+            <div className="flex items-center gap-5">
+              <div className="relative h-20 w-20 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center p-2 overflow-hidden shadow-inner group">
+                {logoPreview ? (
+                  <img
+                    src={logoPreview}
+                    alt="Logo preview"
+                    className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="text-xs text-slate-400 text-center font-medium">No Logo</div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+                    Upload new
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {logoFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLogoFile(null);
+                        setLogoPreview(settings.company_logo || '/logo.png');
+                      }}
+                      className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400">
+                  Recommended: Square image, transparent background PNG or SVG. Max 2MB.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── Payroll Deductions card ── */}
       <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">

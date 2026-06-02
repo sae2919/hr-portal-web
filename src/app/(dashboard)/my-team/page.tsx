@@ -89,10 +89,13 @@ export default function MyTeamPage() {
   const filteredMembers = teamMembers.filter(member => {
     const fullName = `${member.first_name} ${member.last_name}`.toLowerCase();
     const searchLower = search.toLowerCase();
+    const designationName = typeof member.designation === 'string'
+      ? member.designation
+      : (member.designation?.name || '');
     return search === '' || 
       fullName.includes(searchLower) ||
       member.employee_code.toLowerCase().includes(searchLower) ||
-      member.designation?.name.toLowerCase().includes(searchLower);
+      designationName.toLowerCase().includes(searchLower);
   });
 
   // Show loading while checking authorization
@@ -210,7 +213,7 @@ export default function MyTeamPage() {
                         {member.first_name} {member.last_name}
                       </p>
                       <Badge className={`text-xs ${positionBadges[member.position_level] || positionBadges.staff} border-0`}>
-                        {member.position_level?.replace('_', ' ').toUpperCase()}
+                        {typeof member.designation === 'string' ? member.designation : (member.designation?.name || 'N/A')}
                       </Badge>
                       <Badge className={`text-xs ${member.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} border-0`}>
                         {member.status}
@@ -218,12 +221,8 @@ export default function MyTeamPage() {
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
                       <span className="flex items-center gap-1">
-                        <Briefcase size={12} />
-                        {member.designation?.name || 'N/A'}
-                      </span>
-                      <span className="flex items-center gap-1">
                         <Building2 size={12} />
-                        {member.department?.name || 'N/A'}
+                        {typeof member.department === 'string' ? member.department : (member.department?.name || 'N/A')}
                       </span>
                       <span className="font-mono">{member.employee_code}</span>
                     </div>
