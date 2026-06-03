@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Clock,
   Calendar, IndianRupee, UserPlus, Settings, ChevronLeft,
   ChevronRight, UserCircle, Network, Cake, Quote, UserCheck,
-  TrendingUp,
+  TrendingUp, Mail,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
@@ -86,6 +86,12 @@ const navItems = [
     href: '/quotes',
     icon: Quote,
     roles: ['super_admin','super admin', 'admin', 'hr'],
+  },
+  {
+    label: 'Mail Templates',
+    href: '/mail-templates',
+    icon: Mail,
+    roles: ['super_admin', 'super admin', 'admin', 'hr'],
   },
   {
     label: 'Recruitment',
