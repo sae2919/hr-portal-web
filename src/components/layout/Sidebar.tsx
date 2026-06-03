@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Clock,
   Calendar, IndianRupee, UserPlus, Settings, ChevronLeft,
   ChevronRight, UserCircle, Network, Cake, Quote, UserCheck,
+  TrendingUp,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
@@ -54,6 +55,12 @@ const navItems = [
     label: 'Payroll',
     href: '/payroll',
     icon: IndianRupee,
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+  },
+  {
+    label: 'Appraisals',
+    href: '/salary-revisions',
+    icon: TrendingUp,
     roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
   },
   {

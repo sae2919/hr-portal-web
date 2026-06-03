@@ -29,6 +29,21 @@ export interface Employee {
   bank_account_number: string | null;
   bank_ifsc: string | null;
   bank_branch: string | null;
+  // Salary Fields
+  basic_salary?: number;
+  hra?: number;
+  allowances?: any;
+  total_allowances?: number;
+  bonus?: number;
+  pf_percentage?: number;
+  pf_deduction?: number;
+  esi_employee?: number;
+  esi_employer?: number;
+  pt_amount?: number;
+  pt_state?: string | null;
+  tds_amount?: number;
+  other_deductions?: number;
+  ctc?: number;
   created_at: string;
 }
 

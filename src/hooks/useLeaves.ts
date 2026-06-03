@@ -157,3 +157,29 @@ export const useDeleteLeave = () => {
     },
   });
 };
+
+export interface MonthLeave {
+  leave_id: number;
+  employee_id: number;
+  start_date: string;
+  end_date: string;
+  employee_name: string;
+  department: string | null;
+  leave_type: string;
+}
+
+export const useMonthLeaves = (params?: { year?: number; month?: number }) => {
+  const year = params?.year ?? new Date().getFullYear();
+  const month = params?.month ?? (new Date().getMonth() + 1);
+
+  return useQuery<{ year: number; month: number; data: MonthLeave[] }>({
+    queryKey: ['month-leaves', year, month],
+    queryFn: () =>
+      api
+        .get('/attendance/month-leaves', {
+          params: { year, month },
+        })
+        .then((r) => r.data),
+    staleTime: 60 * 1000,
+  });
+};

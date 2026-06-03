@@ -314,7 +314,7 @@ export default function DashboardPage() {
         <div className="text-center py-4">
           <p className="text-xs text-slate-400 flex items-center justify-center gap-1">
             <Heart size={10} />
-            HR Portal Dashboard
+            Techsprout.ai
             <Heart size={10} />
           </p>
         </div>

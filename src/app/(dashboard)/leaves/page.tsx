@@ -19,6 +19,8 @@ import { Label }  from '@/components/ui/label';
 import { Badge }  from '@/components/ui/badge';
 import { Plus, Loader2, Calendar, X, Check, XCircle, Trash2, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { resolveRoleTier } from '@/hooks/useAuth';
+import LeaveCalendar from '@/components/leaves/LeaveCalendar';
 
 // ── Status config ──────────────────────────────────────────────
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -248,8 +250,9 @@ export default function LeavesPage() {
   useEffect(() => setMounted(true), []);
   useEffect(() => setPage(1), [filterStatus, filterDept, filterType, filterTL]);
 
-  const isAdmin    = mounted && (user?.role === 'admin' || hasPermission('manage leaves') || hasPermission('approve leave'));
-  const isTeamLead = mounted && (user?.role === 'manager' || user?.role === 'team_lead' || hasPermission('team lead approve'));
+  const roleTier   = mounted ? resolveRoleTier(user) : 'employee';
+  const isAdmin    = mounted && (roleTier === 'admin' || roleTier === 'hr' || hasPermission('manage leaves'));
+  const isTeamLead = mounted && !isAdmin && (roleTier === 'manager' || roleTier === 'team_lead' || roleTier === 'sales_manager' || hasPermission('approve leave'));
   const canApply   = mounted && (hasPermission('apply leave') || !!user?.employee_id);
   const canHRApprove  = isAdmin;
   const canHRReject   = isAdmin;
@@ -263,11 +266,11 @@ export default function LeavesPage() {
     department_id:    filterDept ? Number(filterDept) : undefined,
     leave_type_id:    filterType ? Number(filterType) : undefined,
     team_lead_status: filterTL || undefined,
-    employee_id:      (isAdmin || isTeamLead) && tab === 'team_leaves' ? undefined : (user?.employee_id ?? undefined),
+    employee_id:      (isAdmin && tab === 'my_leaves') || (isTeamLead && tab === 'team_leaves') ? undefined : (user?.employee_id ?? undefined),
   });
 
   let leaves = Array.isArray(leavesResponse) ? leavesResponse : leavesResponse?.data ?? [];
-  if (mounted && (isAdmin || isTeamLead) && tab === 'team_leaves') {
+  if (mounted && isTeamLead && tab === 'team_leaves') {
     leaves = leaves.filter((l) => l.employee_id !== user?.employee_id);
   }
   const meta   = (!Array.isArray(leavesResponse) && leavesResponse?.meta) ? leavesResponse.meta : null;
@@ -323,22 +326,22 @@ export default function LeavesPage() {
       </div>
 
       {/* Navigation Tabs */}
-      {(isAdmin || isTeamLead) && (
-        <div className="flex items-center border-b border-slate-100 gap-6 pb-1">
-          <button
-            onClick={() => {
-              setTab('my_leaves');
-              setPage(1);
-            }}
-            className={`relative pb-3 text-sm font-semibold transition-all duration-300 hover:text-slate-900 ${
-              tab === 'my_leaves' ? 'text-blue-600' : 'text-slate-400'
-            }`}
-          >
-            My Leaves
-            {tab === 'my_leaves' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full animate-in fade-in slide-in-from-bottom-1 duration-300" />
-            )}
-          </button>
+      <div className="flex items-center border-b border-slate-100 gap-6 pb-1">
+        <button
+          onClick={() => {
+            setTab('my_leaves');
+            setPage(1);
+          }}
+          className={`relative pb-3 text-sm font-semibold transition-all duration-300 hover:text-slate-900 ${
+            tab === 'my_leaves' ? 'text-blue-600' : 'text-slate-400'
+          }`}
+        >
+          {isAdmin ? 'Leaves' : 'My Leaves'}
+          {tab === 'my_leaves' && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full animate-in fade-in slide-in-from-bottom-1 duration-300" />
+          )}
+        </button>
+        {isTeamLead && (
           <button
             onClick={() => {
               setTab('team_leaves');
@@ -348,15 +351,33 @@ export default function LeavesPage() {
               tab === 'team_leaves' ? 'text-blue-600' : 'text-slate-400'
             }`}
           >
-            {isAdmin ? 'Company Leaves' : 'Team Leaves'}
+            Team Leaves
             {tab === 'team_leaves' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full animate-in fade-in slide-in-from-bottom-1 duration-300" />
             )}
           </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={() => {
+            setTab('leave_calendar');
+            setPage(1);
+          }}
+          className={`relative pb-3 text-sm font-semibold transition-all duration-300 hover:text-slate-900 ${
+            tab === 'leave_calendar' ? 'text-blue-600' : 'text-slate-400'
+          }`}
+        >
+          Leave Calendar
+          {tab === 'leave_calendar' && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full animate-in fade-in slide-in-from-bottom-1 duration-300" />
+          )}
+        </button>
+      </div>
 
-      {/* Filters */}
+      {tab === 'leave_calendar' ? (
+        <LeaveCalendar />
+      ) : (
+        <>
+          {/* Filters */}
       <div className="flex gap-3 flex-wrap">
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
           className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 bg-white focus:outline-none">
@@ -594,8 +615,8 @@ export default function LeavesPage() {
           </div>
         )}
       </div>
-
-      
+        </>
+      )}
 
       {/* Modals */}
       <ApplyLeaveModal

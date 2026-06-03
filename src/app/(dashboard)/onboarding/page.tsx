@@ -9,7 +9,7 @@ import {
   DollarSign, Trash2, Edit, Check, X, RefreshCw, AlertCircle,
   Shield, Laptop, Monitor, Smartphone, Headphones, Keyboard,
   Mouse, Printer, HardDrive, Camera, MoreVertical, Loader2,
-  FileCheck, FileWarning, FileX, Image, File, Video
+  FileCheck, FileWarning, FileX, Image, File, Video, Sparkles, User
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,19 +23,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { offboardingService, OffboardingRequest } from '@/services/offboardingService';
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -97,10 +89,22 @@ interface Asset {
   serial_number: string;
   status: 'available' | 'assigned' | 'maintenance' | 'scrapped';
   specifications?: string;
+  current_allocation?: {
+    id: number;
+    employee_id: number;
+    allocated_date: string;
+    status: string;
+  } | null;
+  currentAllocation?: {
+    id: number;
+    employee_id: number;
+    allocated_date: string;
+    status: string;
+  } | null;
 }
 
 // ────────────────────────────────────────────────────────────────
-// Document Type Config
+// Configs
 // ────────────────────────────────────────────────────────────────
 
 const documentTypes = [
@@ -132,6 +136,9 @@ const assetTypes = [
 
 export default function OnboardingPage() {
   const { user } = useAuthStore();
+  const [activeMainTab, setActiveMainTab] = useState<'onboarding' | 'offboarding'>('onboarding');
+  
+  // Onboarding States
   const [onboardingRequests, setOnboardingRequests] = useState<OnboardingRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<OnboardingRequest | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -139,7 +146,6 @@ export default function OnboardingPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [showAssetModal, setShowAssetModal] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedDocumentType, setSelectedDocumentType] = useState('');
@@ -154,31 +160,124 @@ export default function OnboardingPage() {
     ctc: '',
   });
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'hr';
+  // Offboarding States
+  const [offboardingRequests, setOffboardingRequests] = useState<OffboardingRequest[]>([]);
+  const [selectedOffboarding, setSelectedOffboarding] = useState<OffboardingRequest | null>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [offboardingSearch, setOffboardingSearch] = useState('');
+  const [offboardingStatusFilter, setOffboardingStatusFilter] = useState('all');
+  const [showOffboardingModal, setShowOffboardingModal] = useState(false);
+  const [exitFormData, setExitFormData] = useState({
+    employee_id: '',
+    resignation_date: '',
+    last_working_day: '',
+    reason: '',
+  });
+  
+  // Exit action states
+  const [exitSubmitPending, setExitSubmitPending] = useState(false);
+  const [checklistPending, setChecklistPending] = useState(false);
+  const [allocatedAssets, setAllocatedAssets] = useState<Asset[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
+  
+  // Custom action panels in offboarding details modal
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [approveLastWorkingDay, setApproveLastWorkingDay] = useState('');
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [rejectReasonText, setRejectReasonText] = useState('');
 
-  // Fetch data
+  const isAdmin = user?.role === 'super_admin' || user?.role === 'super admin' || user?.role === 'admin' || user?.role === 'hr';
+
+  // Fetch Onboarding and Offboarding data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [onboardingRes, assetsRes] = await Promise.all([
+      const promises: Promise<any>[] = [
         api.get('/onboarding'),
         api.get('/assets'),
-      ]);
+      ];
+
+      if (isAdmin) {
+        promises.push(api.get('/offboarding').catch(() => ({ data: { data: [] } })));
+        promises.push(api.get('/employees').catch(() => ({ data: { data: [] } })));
+      }
+
+      const results = await Promise.all(promises);
+      
+      const onboardingRes = results[0];
+      const assetsRes = results[1];
+      
       setOnboardingRequests(onboardingRes.data?.data?.data || onboardingRes.data?.data || []);
       setAssets(assetsRes.data?.data || []);
+
+      if (isAdmin) {
+        const offboardingRes = results[2];
+        const employeesRes = results[3];
+        setOffboardingRequests(offboardingRes.data?.data?.data || offboardingRes.data?.data || []);
+        
+        // Filter active employees for exit select dropdown
+        const allEmployees = employeesRes.data?.data || [];
+        setEmployees(allEmployees.filter((e: any) => e.status === 'active'));
+      }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
-      toast.error('Failed to load onboarding data');
+      console.error('Failed to fetch lifecycle data:', error);
+      toast.error('Failed to load lifecycle dashboard data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Filter onboarding requests
+  // Fetch allocated assets for selected employee on offboarding
+  const fetchAllocatedAssets = useCallback(async (employeeId: number) => {
+    try {
+      setLoadingAssets(true);
+      const response = await api.get('/assets');
+      const allAssets: Asset[] = response.data?.data?.data || response.data?.data || [];
+      const employeeAssets = allAssets.filter((a) => {
+        const alloc = a.current_allocation || a.currentAllocation;
+        return alloc?.employee_id === employeeId && alloc?.status === 'allocated';
+      });
+      setAllocatedAssets(employeeAssets);
+    } catch (error) {
+      console.error('Failed to fetch allocated assets:', error);
+    } finally {
+      setLoadingAssets(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedOffboarding?.employee_id) {
+      fetchAllocatedAssets(selectedOffboarding.employee_id);
+      
+      // Reset action boxes
+      setShowApproveConfirm(false);
+      setShowRejectConfirm(false);
+      setApproveLastWorkingDay(selectedOffboarding.last_working_day || new Date().toISOString().split('T')[0]);
+      setRejectReasonText('');
+    } else {
+      setAllocatedAssets([]);
+    }
+  }, [selectedOffboarding, fetchAllocatedAssets]);
+
+  // Return allocated asset
+  const handleReturnAsset = async (allocationId: number) => {
+    try {
+      await api.post(`/assets/allocations/${allocationId}/return`);
+      toast.success('Asset returned successfully');
+      if (selectedOffboarding?.employee_id) {
+        fetchAllocatedAssets(selectedOffboarding.employee_id);
+      }
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to return asset');
+    }
+  };
+
+  // Onboarding Requests Filter
   const filteredRequests = onboardingRequests.filter(request => {
     const matchesSearch = searchTerm === '' || 
       request.candidate_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -188,10 +287,19 @@ export default function OnboardingPage() {
     return matchesSearch && matchesStatus;
   });
 
+  // Offboarding Requests Filter
+  const filteredOffboardings = offboardingRequests.filter(request => {
+    const matchesSearch = offboardingSearch === '' || 
+      (request.employee ? `${request.employee.first_name} ${request.employee.last_name}`.toLowerCase().includes(offboardingSearch.toLowerCase()) : false) ||
+      (request.employee?.employee_code?.toLowerCase().includes(offboardingSearch.toLowerCase()) || false);
+    const matchesStatus = offboardingStatusFilter === 'all' || request.status === offboardingStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   // Create new onboarding request
   const createOnboardingRequest = async () => {
     try {
-      const response = await api.post('/onboarding', formData);
+      await api.post('/onboarding', formData);
       toast.success('Onboarding request created successfully');
       setShowRequestModal(false);
       setFormData({
@@ -209,16 +317,126 @@ export default function OnboardingPage() {
     }
   };
 
-  // Update request status
+  // Create new offboarding request
+  const handleCreateOffboarding = async () => {
+    if (!exitFormData.employee_id || !exitFormData.resignation_date || !exitFormData.reason) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      setExitSubmitPending(true);
+      await offboardingService.createRequest({
+        employee_id: Number(exitFormData.employee_id),
+        resignation_date: exitFormData.resignation_date,
+        last_working_day: exitFormData.last_working_day || undefined,
+        reason: exitFormData.reason,
+      });
+      toast.success('Offboarding exit request logged!');
+      setShowOffboardingModal(false);
+      setExitFormData({
+        employee_id: '',
+        resignation_date: '',
+        last_working_day: '',
+        reason: '',
+      });
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to start exit procedure');
+    } finally {
+      setExitSubmitPending(false);
+    }
+  };
+
+  // Update Onboarding status
   const updateRequestStatus = async (id: number, status: string, rejectionReason?: string) => {
     try {
       const endpoint = status === 'approved' ? 'approve' : status === 'rejected' ? 'reject' : 'complete';
       await api.post(`/onboarding/${id}/${endpoint}`, rejectionReason ? { rejection_reason: rejectionReason } : {});
       toast.success(`Request ${status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'completed'} successfully`);
+      setSelectedRequest(null);
       fetchData();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to update request status');
     }
+  };
+
+  // Approve Offboarding
+  const handleApproveOffboarding = async () => {
+    if (!selectedOffboarding || !approveLastWorkingDay) return;
+    try {
+      const res = await offboardingService.approveRequest(selectedOffboarding.id, {
+        last_working_day: approveLastWorkingDay,
+      });
+      toast.success('Resignation request approved.');
+      setSelectedOffboarding(res.data);
+      setShowApproveConfirm(false);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to approve resignation');
+    }
+  };
+
+  // Reject Offboarding
+  const handleRejectOffboarding = async () => {
+    if (!selectedOffboarding || !rejectReasonText) {
+      toast.error('Rejection reason is required');
+      return;
+    }
+    try {
+      const res = await offboardingService.rejectRequest(selectedOffboarding.id, {
+        rejection_reason: rejectReasonText,
+      });
+      toast.success('Exit request rejected.');
+      setSelectedOffboarding(res.data);
+      setShowRejectConfirm(false);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to reject exit request');
+    }
+  };
+
+  // Complete Offboarding (Final settlement & deactivation)
+  const handleCompleteOffboarding = async () => {
+    if (!selectedOffboarding) return;
+    try {
+      const res = await offboardingService.completeRequest(selectedOffboarding.id);
+      toast.success('Offboarding finalized. Employee status updated to inactive/terminated.');
+      setSelectedOffboarding(res.data);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to finalize offboarding');
+    }
+  };
+
+  // Save Offboarding Checklist
+  const handleUpdateChecklist = async () => {
+    if (!selectedOffboarding) return;
+    try {
+      setChecklistPending(true);
+      const res = await offboardingService.updateTasks(selectedOffboarding.id, selectedOffboarding.tasks);
+      toast.success('Exit checklist status updated.');
+      setSelectedOffboarding(res.data);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to save exit checklist');
+    } finally {
+      setChecklistPending(false);
+    }
+  };
+
+  // Toggle checklist tasks locally before saving
+  const handleToggleChecklistTask = (taskId: number) => {
+    if (!selectedOffboarding) return;
+    const updatedTasks = selectedOffboarding.tasks.map(t => {
+      if (t.id === taskId) {
+        return { 
+          ...t, 
+          status: (t.status === 'completed' ? 'pending' : 'completed') as 'pending' | 'completed'
+        };
+      }
+      return t;
+    });
+    setSelectedOffboarding({ ...selectedOffboarding, tasks: updatedTasks });
   };
 
   // Upload document
@@ -294,12 +512,13 @@ export default function OnboardingPage() {
 
   const getStatusColor = (status: string) => {
     const colors = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      approved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
-      onboarded: 'bg-blue-100 text-blue-800',
+      pending: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+      approved: 'bg-green-50 text-green-700 border border-green-200',
+      rejected: 'bg-red-50 text-red-700 border border-red-200',
+      onboarded: 'bg-blue-50 text-blue-700 border border-blue-200',
+      completed: 'bg-blue-50 text-blue-700 border border-blue-200',
     };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+    return colors[status as keyof typeof colors] || 'bg-gray-50 text-gray-700 border border-gray-200';
   };
 
   const getDocumentStatusIcon = (status: string) => {
@@ -335,223 +554,365 @@ export default function OnboardingPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Main Tabs Navigation */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Employee Onboarding</h1>
-          <p className="text-sm text-slate-400 mt-1">Manage new employee onboarding process</p>
+          <h1 className="text-2xl font-bold text-slate-800">Lifecycle Management</h1>
+          <p className="text-sm text-slate-400 mt-1">Manage employee entry (Onboarding) and exits (Offboarding).</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setShowRequestModal(true)} className="gap-2">
-            <Plus size={16} /> New Onboarding Request
-          </Button>
+          <div className="flex items-center gap-2">
+            <Tabs value={activeMainTab} onValueChange={(v: any) => setActiveMainTab(v)} className="w-full sm:w-auto">
+              <TabsList className="bg-slate-100 p-1 rounded-xl">
+                <TabsTrigger value="onboarding" className="rounded-lg text-xs font-semibold px-4 py-2">
+                  Onboarding
+                </TabsTrigger>
+                <TabsTrigger value="offboarding" className="rounded-lg text-xs font-semibold px-4 py-2">
+                  Offboarding
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="Search by name, email, or position..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Status</option>
-          <option value="pending">Pending Review</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="onboarded">Onboarded</option>
-        </select>
-        <Button variant="outline" onClick={() => { setSearchTerm(''); setStatusFilter('all'); }}>
-          <RefreshCw size={14} className="mr-2" /> Reset
-        </Button>
-      </div>
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* TAB 1: ONBOARDING SCREEN */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {activeMainTab === 'onboarding' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-700">Onboarding Candidate Pool</h2>
+            {isAdmin && (
+              <Button onClick={() => setShowRequestModal(true)} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 shadow-sm">
+                <Plus size={16} /> New Onboarding Request
+              </Button>
+            )}
+          </div>
 
-      {/* Onboarding Requests List */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Candidate</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Position</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Joining Date</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Documents</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Tasks</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12">
-                    <Users size={48} className="mx-auto text-slate-300 mb-3" />
-                    <p className="text-slate-400">No onboarding requests found</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredRequests.map((request) => {
-                  const verifiedDocs = request.documents.filter(d => d.status === 'verified').length;
-                  const totalDocs = request.documents.length;
-                  const completedTasks = request.tasks.filter(t => t.status === 'completed').length;
-                  const totalTasks = request.tasks.length;
-                  
-                  return (
-                    <tr key={request.id} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => setSelectedRequest(request)}>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="font-medium text-slate-800">{request.candidate_name}</p>
-                          <p className="text-xs text-slate-400">{request.email}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="text-slate-700">{request.position}</p>
-                          <p className="text-xs text-slate-400">{request.department}</p>
-                        </div>
-                       </td>
-                      <td className="px-6 py-4 text-slate-600">
-                        {new Date(request.joining_date).toLocaleDateString('en-IN')}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Progress value={(verifiedDocs / (documentTypes.length || 1)) * 100} className="w-20 h-1.5" />
-                          <span className="text-xs text-slate-500">{verifiedDocs}/{documentTypes.length}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Progress value={(completedTasks / (totalTasks || 1)) * 100} className="w-20 h-1.5" />
-                          <span className="text-xs text-slate-500">{completedTasks}/{totalTasks}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className={getStatusColor(request.status)}>
-                          {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedRequest(request); }}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition"
-                        >
-                          <Eye size={16} />
-                        </button>
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search by name, email, or position..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 rounded-xl border-slate-200 h-10"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending Review</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="onboarded">Onboarded</option>
+            </select>
+            <Button variant="outline" className="rounded-xl h-10 border-slate-200" onClick={() => { setSearchTerm(''); setStatusFilter('all'); }}>
+              <RefreshCw size={14} className="mr-2 text-slate-500" /> Reset
+            </Button>
+          </div>
+
+          {/* Onboarding Requests Table */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-medium">Candidate</th>
+                    <th className="px-6 py-4 text-left font-medium">Position</th>
+                    <th className="px-6 py-4 text-left font-medium">Joining Date</th>
+                    <th className="px-6 py-4 text-left font-medium">Documents</th>
+                    <th className="px-6 py-4 text-left font-medium">Tasks</th>
+                    <th className="px-6 py-4 text-left font-medium">Status</th>
+                    <th className="px-6 py-4 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 text-slate-700">
+                  {filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-12">
+                        <Users size={48} className="mx-auto text-slate-200 mb-3" />
+                        <p className="text-slate-400">No onboarding requests found</p>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ) : (
+                    filteredRequests.map((request) => {
+                      const verifiedDocs = request.documents.filter(d => d.status === 'verified').length;
+                      const completedTasks = request.tasks.filter(t => t.status === 'completed').length;
+                      const totalTasks = request.tasks.length;
+                      
+                      return (
+                        <tr key={request.id} className="hover:bg-slate-50/70 transition cursor-pointer" onClick={() => setSelectedRequest(request)}>
+                          <td className="px-6 py-4 font-semibold text-slate-800">
+                            <div>
+                              <p>{request.candidate_name}</p>
+                              <p className="text-xs text-slate-400 font-normal">{request.email}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="font-semibold text-slate-800">{request.position}</p>
+                              <p className="text-xs text-slate-400">{request.department}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">
+                            {new Date(request.joining_date).toLocaleDateString('en-IN')}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Progress value={(verifiedDocs / (documentTypes.length || 1)) * 100} className="w-16 h-1.5" />
+                              <span className="text-xs text-slate-500 font-semibold">{verifiedDocs}/{documentTypes.length}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Progress value={(completedTasks / (totalTasks || 1)) * 100} className="w-16 h-1.5" />
+                              <span className="text-xs text-slate-500 font-semibold">{completedTasks}/{totalTasks}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge className={`rounded-lg capitalize ${getStatusColor(request.status)}`}>
+                              {request.status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedRequest(request); }}
+                              className="p-2 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition"
+                            >
+                              <Eye size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Request Detail Modal */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* TAB 2: OFFBOARDING SCREEN */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {activeMainTab === 'offboarding' && isAdmin && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-700">Offboarding & Exit Procedure</h2>
+            <Button onClick={() => setShowOffboardingModal(true)} className="bg-red-600 hover:bg-red-500 text-white rounded-xl gap-2 shadow-sm">
+              <Plus size={16} /> Log Exit Request
+            </Button>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search by employee name or employee code..."
+                value={offboardingSearch}
+                onChange={(e) => setOffboardingSearch(e.target.value)}
+                className="pl-9 rounded-xl border-slate-200 h-10"
+              />
+            </div>
+            <select
+              value={offboardingStatusFilter}
+              onChange={(e) => setOffboardingStatusFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending Exit</option>
+              <option value="approved">Approved (Notice)</option>
+              <option value="rejected">Rejected</option>
+              <option value="completed">Completed Exit</option>
+            </select>
+            <Button variant="outline" className="rounded-xl h-10 border-slate-200" onClick={() => { setOffboardingSearch(''); setOffboardingStatusFilter('all'); }}>
+              <RefreshCw size={14} className="mr-2 text-slate-500" /> Reset
+            </Button>
+          </div>
+
+          {/* Offboarding Requests Table */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-medium">Employee</th>
+                    <th className="px-6 py-4 text-left font-medium">Resignation Date</th>
+                    <th className="px-6 py-4 text-left font-medium">Last Working Day</th>
+                    <th className="px-6 py-4 text-left font-medium">Clearance Progress</th>
+                    <th className="px-6 py-4 text-left font-medium">Status</th>
+                    <th className="px-6 py-4 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 text-slate-700">
+                  {filteredOffboardings.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-12">
+                        <Users size={48} className="mx-auto text-slate-200 mb-3" />
+                        <p className="text-slate-400">No offboarding requests found</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOffboardings.map((request) => {
+                      const completedChecklists = (request.tasks || []).filter(t => t.status === 'completed').length;
+                      const totalChecklists = (request.tasks || []).length;
+                      
+                      return (
+                        <tr key={request.id} className="hover:bg-slate-50/70 transition cursor-pointer" onClick={() => setSelectedOffboarding(request)}>
+                          <td className="px-6 py-4 font-semibold text-slate-800">
+                            <div>
+                              <p>{request.employee ? `${request.employee.first_name} ${request.employee.last_name}` : 'Unknown'}</p>
+                              <p className="text-xs text-slate-400 font-normal">{request.employee?.employee_code || ''}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">
+                            {new Date(request.resignation_date).toLocaleDateString('en-IN')}
+                          </td>
+                          <td className="px-6 py-4 text-slate-500 font-medium">
+                            {request.last_working_day 
+                              ? new Date(request.last_working_day).toLocaleDateString('en-IN')
+                              : <span className="text-slate-400 font-normal italic">Not confirmed yet</span>}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Progress value={totalChecklists > 0 ? (completedChecklists / totalChecklists) * 100 : 0} className="w-16 h-1.5" />
+                              <span className="text-xs text-slate-500 font-semibold">{completedChecklists}/{totalChecklists}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge className={`rounded-lg capitalize ${getStatusColor(request.status)}`}>
+                              {request.status === 'approved' ? 'Approved (Notice)' : request.status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedOffboarding(request); }}
+                              className="p-2 hover:bg-slate-100 text-slate-400 hover:text-red-600 rounded-xl transition"
+                            >
+                              <Eye size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* MODAL: ONBOARDING CANDIDATE DETAIL */}
+      {/* ──────────────────────────────────────────────────────────────── */}
       {selectedRequest && (
         <Dialog open={!!selectedRequest} onOpenChange={() => setSelectedRequest(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6">
             <DialogHeader>
-              <DialogTitle className="text-xl">Onboarding Details</DialogTitle>
-              <DialogDescription>
-                {selectedRequest.candidate_name} - {selectedRequest.position}
+              <DialogTitle className="text-lg font-bold text-slate-800">Candidate Onboarding File</DialogTitle>
+              <DialogDescription className="text-xs">
+                {selectedRequest.candidate_name} — {selectedRequest.position} ({selectedRequest.department})
               </DialogDescription>
             </DialogHeader>
 
             <Tabs defaultValue="details" className="mt-4">
-              <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="documents">Documents</TabsTrigger>
-                <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                <TabsTrigger value="assets">Assets</TabsTrigger>
-                <TabsTrigger value="offer">Offer Letter</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-5 bg-slate-100 p-1 rounded-xl">
+                <TabsTrigger value="details" className="rounded-lg text-xs">Details</TabsTrigger>
+                <TabsTrigger value="documents" className="rounded-lg text-xs">Documents</TabsTrigger>
+                <TabsTrigger value="tasks" className="rounded-lg text-xs">Tasks</TabsTrigger>
+                <TabsTrigger value="assets" className="rounded-lg text-xs">Assets</TabsTrigger>
+                <TabsTrigger value="offer" className="rounded-lg text-xs">Offer Letter</TabsTrigger>
               </TabsList>
 
               {/* Details Tab */}
-              <TabsContent value="details" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
+              <TabsContent value="details" className="space-y-4 mt-4 animate-in fade-in duration-200">
+                <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 border border-slate-100 rounded-2xl p-4">
                   <div>
-                    <Label className="text-slate-500">Full Name</Label>
-                    <p className="font-medium">{selectedRequest.candidate_name}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Candidate Name</Label>
+                    <p className="font-semibold text-slate-850">{selectedRequest.candidate_name}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">Email</Label>
-                    <p className="font-medium">{selectedRequest.email}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Email Address</Label>
+                    <p className="font-semibold text-slate-850">{selectedRequest.email}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">Phone</Label>
-                    <p className="font-medium">{selectedRequest.phone || 'N/A'}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Phone Number</Label>
+                    <p className="font-semibold text-slate-850">{selectedRequest.phone || 'N/A'}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">Position</Label>
-                    <p className="font-medium">{selectedRequest.position}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Target Position</Label>
+                    <p className="font-semibold text-slate-850">{selectedRequest.position}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">Department</Label>
-                    <p className="font-medium">{selectedRequest.department}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Department</Label>
+                    <p className="font-semibold text-slate-850">{selectedRequest.department}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">Joining Date</Label>
-                    <p className="font-medium">{new Date(selectedRequest.joining_date).toLocaleDateString('en-IN')}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Target Joining Date</Label>
+                    <p className="font-semibold text-slate-850">{new Date(selectedRequest.joining_date).toLocaleDateString('en-IN')}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">CTC</Label>
-                    <p className="font-medium">₹{selectedRequest.ctc?.toLocaleString('en-IN') || 'N/A'}</p>
+                    <Label className="text-slate-400 text-xs font-semibold">Annual CTC</Label>
+                    <p className="font-semibold text-slate-850">₹{selectedRequest.ctc?.toLocaleString('en-IN') || 'N/A'}</p>
                   </div>
                   <div>
-                    <Label className="text-slate-500">Status</Label>
-                    <Badge className={getStatusColor(selectedRequest.status)}>{selectedRequest.status}</Badge>
+                    <Label className="text-slate-400 text-xs font-semibold">Onboarding Status</Label>
+                    <div className="mt-1">
+                      <Badge className={`rounded-lg capitalize ${getStatusColor(selectedRequest.status)}`}>
+                        {selectedRequest.status}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 
                 {selectedRequest.rejection_reason && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <p className="text-sm font-medium text-red-800">Rejection Reason:</p>
-                    <p className="text-sm text-red-600">{selectedRequest.rejection_reason}</p>
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm">
+                    <p className="font-bold text-red-800">Rejection Reason:</p>
+                    <p className="text-red-700 mt-1">{selectedRequest.rejection_reason}</p>
                   </div>
                 )}
 
                 {isAdmin && selectedRequest.status === 'pending' && (
-                  <div className="flex gap-3 pt-4">
-                    <Button onClick={() => updateRequestStatus(selectedRequest.id, 'approved')} className="flex-1 bg-green-600 hover:bg-green-700">
-                      <Check size={16} className="mr-2" /> Approve
+                  <div className="flex gap-3 pt-2">
+                    <Button onClick={() => updateRequestStatus(selectedRequest.id, 'approved')} className="flex-1 bg-green-600 hover:bg-green-500 text-white rounded-xl">
+                      <Check size={16} className="mr-2" /> Approve Candidate
                     </Button>
                     <Button 
                       onClick={() => {
-                        const reason = prompt('Enter rejection reason:');
+                        const reason = prompt('Enter candidate rejection reason:');
                         if (reason) updateRequestStatus(selectedRequest.id, 'rejected', reason);
                       }} 
                       variant="destructive" 
-                      className="flex-1"
+                      className="flex-1 rounded-xl"
                     >
-                      <X size={16} className="mr-2" /> Reject
+                      <X size={16} className="mr-2" /> Reject Candidate
                     </Button>
                   </div>
                 )}
 
                 {isAdmin && selectedRequest.status === 'approved' && (
-                  <Button onClick={() => updateRequestStatus(selectedRequest.id, 'complete')} className="w-full bg-blue-600">
-                    <CheckCircle size={16} className="mr-2" /> Complete Onboarding
+                  <Button onClick={() => updateRequestStatus(selectedRequest.id, 'complete')} className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl">
+                    <CheckCircle size={16} className="mr-2" /> Finalize Onboarding & Generate Credentials
                   </Button>
                 )}
               </TabsContent>
 
               {/* Documents Tab */}
-              <TabsContent value="documents" className="space-y-4 mt-4">
+              <TabsContent value="documents" className="space-y-4 mt-4 animate-in fade-in duration-200">
                 <div className="flex justify-between items-center">
-                  <h3 className="font-semibold">Required Documents</h3>
+                  <h3 className="text-sm font-bold text-slate-700">Verification Checklists</h3>
                   {isAdmin && (
-                    <Button size="sm" onClick={() => setShowDocumentModal(true)} className="gap-1">
-                      <Upload size={14} /> Upload Document
+                    <Button size="sm" onClick={() => setShowDocumentModal(true)} className="bg-blue-600 hover:bg-blue-500 text-white gap-1 rounded-xl">
+                      <Upload size={14} /> Upload Doc
                     </Button>
                   )}
                 </div>
@@ -560,15 +921,15 @@ export default function OnboardingPage() {
                   {documentTypes.map((docType) => {
                     const doc = selectedRequest.documents.find(d => d.document_type === docType.value);
                     return (
-                      <div key={docType.value} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <div key={docType.value} className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center">
-                            <docType.icon size={20} className="text-slate-500" />
+                          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                            <docType.icon size={18} className="text-slate-500" />
                           </div>
                           <div>
-                            <p className="font-medium text-slate-800">{docType.label}</p>
+                            <p className="font-semibold text-slate-700 text-sm">{docType.label}</p>
                             <p className="text-xs text-slate-400">
-                              {doc ? `Uploaded: ${new Date(doc.created_at).toLocaleDateString()}` : 'Not uploaded yet'}
+                              {doc ? `Uploaded: ${new Date(doc.created_at).toLocaleDateString()}` : 'Missing file'}
                             </p>
                           </div>
                         </div>
@@ -578,7 +939,8 @@ export default function OnboardingPage() {
                               {getDocumentStatusIcon(doc.status)}
                               <button
                                 onClick={() => downloadDocument(doc.id, doc.original_name)}
-                                className="p-1.5 rounded-lg hover:bg-white text-slate-500 hover:text-blue-600 transition"
+                                className="p-1.5 hover:bg-white text-slate-400 hover:text-blue-600 rounded-lg transition"
+                                title="Download"
                               >
                                 <Download size={14} />
                               </button>
@@ -586,16 +948,18 @@ export default function OnboardingPage() {
                                 <>
                                   <button
                                     onClick={() => verifyDocument(doc.id, 'verified')}
-                                    className="p-1.5 rounded-lg hover:bg-white text-green-500 transition"
+                                    className="p-1.5 hover:bg-white text-green-500 rounded-lg transition"
+                                    title="Verify"
                                   >
                                     <Check size={14} />
                                   </button>
                                   <button
                                     onClick={() => {
-                                      const notes = prompt('Enter rejection reason:');
+                                      const notes = prompt('Reason for document rejection:');
                                       if (notes) verifyDocument(doc.id, 'rejected', notes);
                                     }}
-                                    className="p-1.5 rounded-lg hover:bg-white text-red-500 transition"
+                                    className="p-1.5 hover:bg-white text-red-500 rounded-lg transition"
+                                    title="Reject"
                                   >
                                     <X size={14} />
                                   </button>
@@ -603,7 +967,7 @@ export default function OnboardingPage() {
                               )}
                             </>
                           )}
-                          {!doc && <span className="text-xs text-slate-400">Required</span>}
+                          {!doc && <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Required</span>}
                         </div>
                       </div>
                     );
@@ -612,20 +976,26 @@ export default function OnboardingPage() {
               </TabsContent>
 
               {/* Tasks Tab */}
-              <TabsContent value="tasks" className="space-y-4 mt-4">
+              <TabsContent value="tasks" className="space-y-4 mt-4 animate-in fade-in duration-200">
                 <div className="grid gap-3">
                   {selectedRequest.tasks.map((task) => (
-                    <div key={task.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <div key={task.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
                       <div className="flex items-center gap-3">
                         {getTaskStatusIcon(task.status)}
                         <div>
-                          <p className="font-medium text-slate-800">{task.task_name}</p>
-                          <p className="text-xs text-slate-400">
-                            Assigned to: {task.assigned_to} • Due: {new Date(task.due_date).toLocaleDateString()}
+                          <p className="font-semibold text-slate-700 text-sm">{task.task_name}</p>
+                          <p className="text-xs text-slate-455">
+                            Owner: {task.assigned_to} • Deadline: {new Date(task.due_date).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
-                      <Badge className={task.status === 'completed' ? 'bg-green-100 text-green-800' : task.status === 'overdue' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}>
+                      <Badge className={`rounded-lg capitalize ${
+                        task.status === 'completed' 
+                          ? 'bg-green-50 text-green-700 border border-green-200' 
+                          : task.status === 'overdue' 
+                            ? 'bg-red-50 text-red-700 border border-red-200' 
+                            : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                      }`}>
                         {task.status.replace('_', ' ')}
                       </Badge>
                     </div>
@@ -634,19 +1004,20 @@ export default function OnboardingPage() {
               </TabsContent>
 
               {/* Assets Tab */}
-              <TabsContent value="assets" className="space-y-4 mt-4">
+              <TabsContent value="assets" className="space-y-4 mt-4 animate-in fade-in duration-200">
+                <p className="text-xs text-slate-400">Allocate hardware and IT tools before final onboarding completion.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {assets.filter(a => a.status === 'available').map((asset) => (
-                    <div key={asset.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <div key={asset.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
                       <div className="flex items-center gap-3">
                         {getAssetIcon(asset.type)}
                         <div>
-                          <p className="font-medium text-slate-800">{asset.name}</p>
+                          <p className="font-semibold text-slate-800 text-sm">{asset.name}</p>
                           <p className="text-xs text-slate-400">{asset.asset_code} • {asset.brand} {asset.model}</p>
                         </div>
                       </div>
                       {isAdmin && (
-                        <Button size="sm" onClick={() => allocateAsset(asset.id, selectedRequest.id)}>
+                        <Button size="sm" onClick={() => allocateAsset(asset.id, selectedRequest.id)} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl">
                           Allocate
                         </Button>
                       )}
@@ -655,31 +1026,31 @@ export default function OnboardingPage() {
                   {assets.filter(a => a.status === 'available').length === 0 && (
                     <div className="col-span-2 text-center py-8 text-slate-400">
                       <Package size={32} className="mx-auto mb-2 opacity-30" />
-                      <p>No available assets</p>
+                      <p>No available hardware/assets in stock</p>
                     </div>
                   )}
                 </div>
               </TabsContent>
 
               {/* Offer Letter Tab */}
-              <TabsContent value="offer" className="space-y-4 mt-4">
+              <TabsContent value="offer" className="space-y-4 mt-4 animate-in fade-in duration-200">
                 {selectedRequest.offer_letters.length > 0 ? (
                   selectedRequest.offer_letters.map((letter) => (
-                    <div key={letter.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <div key={letter.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
                       <div>
-                        <p className="font-medium text-slate-800">Offer Letter - {letter.letter_number}</p>
+                        <p className="font-semibold text-slate-800 text-sm">Offer Document - {letter.letter_number}</p>
                         <p className="text-xs text-slate-400">Generated: {new Date(letter.letter_date).toLocaleDateString()}</p>
                       </div>
                       <div className="flex gap-2">
                         <button
                           onClick={() => downloadDocument(letter.id, `offer_letter_${selectedRequest.candidate_name}.pdf`)}
-                          className="p-2 rounded-lg bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-600 transition shadow-sm"
+                          className="p-2 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition shadow-sm border border-slate-200"
                         >
-                          <Download size={16} />
+                          <Download size={14} />
                         </button>
                         {isAdmin && letter.status === 'draft' && (
-                          <Button size="sm" onClick={() => api.post(`/onboarding/offer-letters/${letter.id}/send`)}>
-                            <Send size={14} className="mr-1" /> Send
+                          <Button size="sm" onClick={() => api.post(`/onboarding/offer-letters/${letter.id}/send`)} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl">
+                            <Send size={12} className="mr-1" /> Send Offer
                           </Button>
                         )}
                       </div>
@@ -687,11 +1058,11 @@ export default function OnboardingPage() {
                   ))
                 ) : (
                   <div className="text-center py-8">
-                    <FileText size={48} className="mx-auto text-slate-300 mb-3" />
-                    <p className="text-slate-400">No offer letter generated yet</p>
+                    <FileText size={48} className="mx-auto text-slate-200 mb-3" />
+                    <p className="text-slate-400 text-sm">No offer letter generated yet</p>
                     {isAdmin && (
-                      <Button className="mt-4" onClick={() => toast.info('Offer letter generation coming soon')}>
-                        Generate Offer Letter
+                      <Button className="mt-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl" onClick={() => toast.info('Generators are triggered when candidates are approved')}>
+                        Check Approval State
                       </Button>
                     )}
                   </div>
@@ -702,94 +1073,420 @@ export default function OnboardingPage() {
         </Dialog>
       )}
 
-      {/* Create Request Modal */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* MODAL: OFFBOARDING EMPLOYEE DETAIL */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {selectedOffboarding && (
+        <Dialog open={!!selectedOffboarding} onOpenChange={() => setSelectedOffboarding(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-slate-800">Employee Exit Procedure</DialogTitle>
+              <DialogDescription className="text-xs">
+                {selectedOffboarding.employee ? `${selectedOffboarding.employee.first_name} ${selectedOffboarding.employee.last_name}` : 'Unknown'} 
+                {selectedOffboarding.employee?.employee_code ? ` — ${selectedOffboarding.employee.employee_code}` : ''}
+              </DialogDescription>
+            </DialogHeader>
+
+            <Tabs defaultValue="details" className="mt-4">
+              <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-xl">
+                <TabsTrigger value="details" className="rounded-lg text-xs">Exit Details</TabsTrigger>
+                <TabsTrigger value="checklist" className="rounded-lg text-xs">Clearance Checklist</TabsTrigger>
+                <TabsTrigger value="assets" className="rounded-lg text-xs">Allocated Assets</TabsTrigger>
+              </TabsList>
+
+              {/* Exit Details Tab */}
+              <TabsContent value="details" className="space-y-4 mt-4 animate-in fade-in duration-200">
+                <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                  <div>
+                    <Label className="text-slate-400 text-xs font-semibold">Employee Name</Label>
+                    <p className="font-semibold text-slate-850">{selectedOffboarding.employee ? `${selectedOffboarding.employee.first_name} ${selectedOffboarding.employee.last_name}` : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-slate-400 text-xs font-semibold">Resignation Submitted</Label>
+                    <p className="font-semibold text-slate-850">{new Date(selectedOffboarding.resignation_date).toLocaleDateString('en-IN')}</p>
+                  </div>
+                  <div>
+                    <Label className="text-slate-400 text-xs font-semibold">Last Working Day</Label>
+                    <p className="font-semibold text-slate-850">
+                      {selectedOffboarding.last_working_day 
+                        ? new Date(selectedOffboarding.last_working_day).toLocaleDateString('en-IN')
+                        : 'Under Review'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-slate-400 text-xs font-semibold">Exit Status</Label>
+                    <div className="mt-1">
+                      <Badge className={`rounded-lg capitalize ${getStatusColor(selectedOffboarding.status)}`}>
+                        {selectedOffboarding.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-slate-400 text-xs font-semibold">Reason for Resignation</Label>
+                    <p className="text-slate-700 mt-0.5 bg-white border border-slate-100 rounded-xl p-3 text-xs leading-relaxed">
+                      {selectedOffboarding.reason}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedOffboarding.rejection_reason && (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm">
+                    <p className="font-bold text-red-800">Rejection Feedback:</p>
+                    <p className="text-red-700 mt-1">{selectedOffboarding.rejection_reason}</p>
+                  </div>
+                )}
+
+                {/* Confirm approvals or rejections actions inline */}
+                {selectedOffboarding.status === 'pending' && !showApproveConfirm && !showRejectConfirm && (
+                  <div className="flex gap-3 pt-2">
+                    <Button onClick={() => setShowApproveConfirm(true)} className="flex-1 bg-green-600 hover:bg-green-500 text-white rounded-xl">
+                      <Check size={16} className="mr-2" /> Approve Resignation
+                    </Button>
+                    <Button onClick={() => setShowRejectConfirm(true)} variant="destructive" className="flex-1 rounded-xl">
+                      <X size={16} className="mr-2" /> Reject Resignation
+                    </Button>
+                  </div>
+                )}
+
+                {showApproveConfirm && (
+                  <div className="bg-green-50 border border-green-100 rounded-2xl p-4 space-y-3">
+                    <h4 className="text-xs font-bold text-green-800">Confirm Exit & Notice Period</h4>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-green-700">Confirm/Set Last Working Day</Label>
+                      <Input
+                        type="date"
+                        value={approveLastWorkingDay}
+                        onChange={(e) => setApproveLastWorkingDay(e.target.value)}
+                        className="bg-white border-green-200 rounded-xl h-10"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={() => setShowApproveConfirm(false)} variant="outline" className="flex-1 rounded-xl border-green-200 text-green-800 hover:bg-green-100">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleApproveOffboarding} className="flex-1 bg-green-600 hover:bg-green-500 text-white rounded-xl">
+                        Approve & Schedule
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {showRejectConfirm && (
+                  <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-3">
+                    <h4 className="text-xs font-bold text-red-800">Reject Resignation/Exit Request</h4>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-red-700">Rejection Notes (Sent to employee)</Label>
+                      <textarea
+                        value={rejectReasonText}
+                        onChange={(e) => setRejectReasonText(e.target.value)}
+                        placeholder="Please write down comments or feedback for rejection..."
+                        className="w-full bg-white border border-red-200 rounded-xl p-3 text-xs leading-normal focus:outline-none"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={() => setShowRejectConfirm(false)} variant="outline" className="flex-1 rounded-xl border-red-200 text-red-800 hover:bg-red-100">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleRejectOffboarding} disabled={!rejectReasonText} className="flex-1 bg-red-600 hover:bg-red-500 text-white rounded-xl">
+                        Confirm Rejection
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedOffboarding.status === 'approved' && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center space-y-3">
+                    <p className="text-xs text-slate-500">
+                      Resignation approved. Complete all clearances in the tabs above before final termination deactivation.
+                    </p>
+                    <Button 
+                      onClick={handleCompleteOffboarding} 
+                      disabled={selectedOffboarding.tasks.some(t => t.status !== 'completed')}
+                      className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl"
+                    >
+                      <CheckCircle size={16} className="mr-2" /> Complete Exit & Terminate Employee Account
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Exit Clearance Checklist Tab */}
+              <TabsContent value="checklist" className="space-y-4 mt-4 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-700">Clearance Checklist</h3>
+                  <Badge className="bg-slate-100 text-slate-600 rounded-lg">
+                    {selectedOffboarding.tasks.filter(t => t.status === 'completed').length}/{selectedOffboarding.tasks.length} Completed
+                  </Badge>
+                </div>
+
+                <div className="grid gap-3">
+                  {selectedOffboarding.tasks.map((task) => (
+                    <div 
+                      key={task.id} 
+                      onClick={() => selectedOffboarding.status === 'approved' && handleToggleChecklistTask(task.id)}
+                      className={`flex items-center justify-between p-3.5 border rounded-2xl transition cursor-pointer ${
+                        task.status === 'completed'
+                          ? 'bg-green-50/50 border-green-100 text-green-900'
+                          : 'bg-slate-50 border-slate-100 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition ${
+                          task.status === 'completed'
+                            ? 'bg-green-600 border-green-600 text-white'
+                            : 'border-slate-300 bg-white'
+                        }`}>
+                          {task.status === 'completed' && <Check size={12} />}
+                        </div>
+                        <span className="font-semibold text-sm">{task.task_name}</span>
+                      </div>
+                      <Badge className={`rounded-lg capitalize ${
+                        task.status === 'completed'
+                          ? 'bg-green-100 text-green-850'
+                          : 'bg-yellow-100 text-yellow-850'
+                      }`}>
+                        {task.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedOffboarding.status === 'approved' && (
+                  <Button 
+                    onClick={handleUpdateChecklist} 
+                    disabled={checklistPending} 
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl"
+                  >
+                    {checklistPending && <Loader2 size={16} className="animate-spin mr-2" />}
+                    Save Clearance Checklist
+                  </Button>
+                )}
+              </TabsContent>
+
+              {/* Allocated Assets Tab */}
+              <TabsContent value="assets" className="space-y-4 mt-4 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-700">Currently Allocated Hardware</h3>
+                  <Badge className="bg-slate-100 text-slate-600 rounded-lg">
+                    {allocatedAssets.length} Assets Found
+                  </Badge>
+                </div>
+
+                <div className="grid gap-3">
+                  {loadingAssets ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 size={24} className="animate-spin text-slate-400" />
+                    </div>
+                  ) : allocatedAssets.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 bg-slate-50 border border-slate-100 rounded-2xl">
+                      <Package size={32} className="mx-auto mb-2 opacity-30" />
+                      <p className="text-xs">No active hardware allocations for this employee.</p>
+                    </div>
+                  ) : (
+                    allocatedAssets.map((asset) => {
+                      const allocId = asset.current_allocation?.id || asset.currentAllocation?.id;
+                      return (
+                        <div key={asset.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-500">
+                              {getAssetIcon(asset.type)}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-800 text-sm">{asset.name}</p>
+                              <p className="text-xs text-slate-400">{asset.asset_code} • {asset.brand} {asset.model} • S/N: {asset.serial_number}</p>
+                            </div>
+                          </div>
+                          {allocId && (
+                            <Button 
+                              onClick={() => handleReturnAsset(allocId)} 
+                              size="sm" 
+                              variant="destructive"
+                              className="rounded-xl"
+                            >
+                              Return Asset
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* MODAL: NEW ONBOARDING REQUEST */}
+      {/* ──────────────────────────────────────────────────────────────── */}
       <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-        <DialogContent>
+        <DialogContent className="rounded-3xl p-6">
           <DialogHeader>
-            <DialogTitle>New Onboarding Request</DialogTitle>
-            <DialogDescription>Enter candidate details to start the onboarding process</DialogDescription>
+            <DialogTitle className="text-lg font-bold text-slate-800">New Onboarding Request</DialogTitle>
+            <DialogDescription className="text-xs">Enter candidate details to start the onboarding process</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 text-sm mt-2">
             <div>
-              <Label>Candidate Name *</Label>
+              <Label className="text-slate-600">Candidate Name *</Label>
               <Input
                 value={formData.candidate_name}
                 onChange={(e) => setFormData({ ...formData, candidate_name: e.target.value })}
                 placeholder="Full name"
+                className="rounded-xl border-slate-200 h-10 mt-1"
               />
             </div>
             <div>
-              <Label>Email *</Label>
+              <Label className="text-slate-600">Email *</Label>
               <Input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="Email address"
+                className="rounded-xl border-slate-200 h-10 mt-1"
               />
             </div>
             <div>
-              <Label>Phone</Label>
+              <Label className="text-slate-600">Phone</Label>
               <Input
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 placeholder="Phone number"
+                className="rounded-xl border-slate-200 h-10 mt-1"
               />
             </div>
-            <div>
-              <Label>Position *</Label>
-              <Input
-                value={formData.position}
-                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                placeholder="Job title"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-slate-600">Position *</Label>
+                <Input
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  placeholder="Job title"
+                  className="rounded-xl border-slate-200 h-10 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-600">Department *</Label>
+                <Input
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  placeholder="Department name"
+                  className="rounded-xl border-slate-200 h-10 mt-1"
+                />
+              </div>
             </div>
-            <div>
-              <Label>Department *</Label>
-              <Input
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                placeholder="Department name"
-              />
-            </div>
-            <div>
-              <Label>Joining Date *</Label>
-              <Input
-                type="date"
-                value={formData.joining_date}
-                onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>CTC (Annual)</Label>
-              <Input
-                type="number"
-                value={formData.ctc}
-                onChange={(e) => setFormData({ ...formData, ctc: e.target.value })}
-                placeholder="Annual compensation"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-slate-600">Joining Date *</Label>
+                <Input
+                  type="date"
+                  value={formData.joining_date}
+                  onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
+                  className="rounded-xl border-slate-200 h-10 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-600">CTC (Annual)</Label>
+                <Input
+                  type="number"
+                  value={formData.ctc}
+                  onChange={(e) => setFormData({ ...formData, ctc: e.target.value })}
+                  placeholder="Annual compensation"
+                  className="rounded-xl border-slate-200 h-10 mt-1"
+                />
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRequestModal(false)}>Cancel</Button>
-            <Button onClick={createOnboardingRequest}>Create Request</Button>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowRequestModal(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={createOnboardingRequest} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl">Create Request</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Upload Document Modal */}
-      <Dialog open={showDocumentModal} onOpenChange={setShowDocumentModal}>
-        <DialogContent>
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* MODAL: LOG OFFBOARDING (EXIT) REQUEST */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <Dialog open={showOffboardingModal} onOpenChange={setShowOffboardingModal}>
+        <DialogContent className="rounded-3xl p-6">
           <DialogHeader>
-            <DialogTitle>Upload Document</DialogTitle>
-            <DialogDescription>Upload document for {selectedRequest?.candidate_name}</DialogDescription>
+            <DialogTitle className="text-lg font-bold text-slate-800">Log Resignation / Exit Procedure</DialogTitle>
+            <DialogDescription className="text-xs">Start exit notice process for active employees</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 text-sm mt-2">
             <div>
-              <Label>Document Type *</Label>
+              <Label className="text-slate-600">Select Employee *</Label>
+              <select
+                value={exitFormData.employee_id}
+                onChange={(e) => setExitFormData({ ...exitFormData, employee_id: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 mt-1"
+              >
+                <option value="">Choose employee...</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.full_name || `${e.first_name} ${e.last_name}`} ({e.employee_code})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-slate-600">Resignation Date *</Label>
+                <Input
+                  type="date"
+                  value={exitFormData.resignation_date}
+                  onChange={(e) => setExitFormData({ ...exitFormData, resignation_date: e.target.value })}
+                  className="rounded-xl border-slate-200 h-10 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-600">Proposed Last Day</Label>
+                <Input
+                  type="date"
+                  value={exitFormData.last_working_day}
+                  onChange={(e) => setExitFormData({ ...exitFormData, last_working_day: e.target.value })}
+                  className="rounded-xl border-slate-200 h-10 mt-1"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-slate-600">Resignation Reason / Exit Explanation *</Label>
+              <textarea
+                value={exitFormData.reason}
+                onChange={(e) => setExitFormData({ ...exitFormData, reason: e.target.value })}
+                placeholder="Details of exit reason or resignation explanation..."
+                className="w-full border border-slate-200 rounded-xl p-3 text-xs leading-normal resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 mt-1"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowOffboardingModal(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={handleCreateOffboarding} disabled={exitSubmitPending} className="bg-red-600 hover:bg-red-500 text-white rounded-xl">
+              {exitSubmitPending && <Loader2 size={16} className="animate-spin mr-2" />}
+              Initiate Exit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* MODAL: ONBOARDING CANDIDATE UPLOAD DOCUMENT */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <Dialog open={showDocumentModal} onOpenChange={setShowDocumentModal}>
+        <DialogContent className="rounded-3xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800">Upload Document</DialogTitle>
+            <DialogDescription className="text-xs">Upload document for {selectedRequest?.candidate_name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm mt-2">
+            <div>
+              <Label className="text-slate-600">Document Type *</Label>
               <select
                 value={selectedDocumentType}
                 onChange={(e) => setSelectedDocumentType(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none mt-1"
               >
                 <option value="">Select document type</option>
                 {documentTypes.map(doc => (
@@ -798,18 +1495,19 @@ export default function OnboardingPage() {
               </select>
             </div>
             <div>
-              <Label>File *</Label>
+              <Label className="text-slate-600">File *</Label>
               <Input
                 type="file"
                 onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                className="rounded-xl border-slate-200 h-10 mt-1"
               />
-              <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG, DOC (Max 5MB)</p>
+              <p className="text-[10px] text-slate-400 mt-1">PDF, JPG, PNG, DOC, DOCX (Max 5MB)</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDocumentModal(false)}>Cancel</Button>
-            <Button onClick={uploadDocument} disabled={!selectedFile || !selectedDocumentType || uploading}>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowDocumentModal(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={uploadDocument} disabled={!selectedFile || !selectedDocumentType || uploading} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl">
               {uploading ? <Loader2 size={16} className="animate-spin mr-2" /> : <Upload size={16} className="mr-2" />}
               Upload
             </Button>
