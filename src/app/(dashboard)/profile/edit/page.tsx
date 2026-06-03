@@ -27,6 +27,8 @@ export default function ProfileEditPage() {
     new_password_confirmation: '',
   });
 
+  const isEditable = user?.role === 'admin' || user?.role === 'hr' || user?.role === 'super_admin';
+
   useEffect(() => {
     if (user) {
       setProfile({
@@ -133,11 +135,15 @@ export default function ProfileEditPage() {
                 type="email"
                 value={profile.email}
                 onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                 placeholder="your@email.com"
                 required
+                disabled={!isEditable}
               />
             </div>
+            {!isEditable && (
+              <p className="text-xs text-slate-400 mt-1">To change your email address, please contact an Administrator.</p>
+            )}
           </div>
 
           {/* Phone */}
