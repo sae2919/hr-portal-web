@@ -131,6 +131,7 @@ export default function EditEmployeePage() {
   });
   const [esiEnabled, setEsiEnabled] = useState(false);
   const [tdsEnabled, setTdsEnabled] = useState(false);
+  const [hraPercentage, setHraPercentage] = useState<number>(0);
 
   const [formData, setFormData] = useState({
     first_name: '', last_name: '', email: '', phone: '', gender: '' as '',
@@ -207,6 +208,10 @@ export default function EditEmployeePage() {
     setEsiEnabled(esiEmp > 0 || esiEmpr > 0);
     setTdsEnabled(tds > 0);
 
+    const basicVal = Number(employee.basic_salary) || 0;
+    const hraVal   = Number(employee.hra) || 0;
+    setHraPercentage(basicVal > 0 ? Math.round((hraVal / basicVal) * 100) : 0);
+
     setFormData({
       first_name: employee.first_name || '', last_name: employee.last_name || '',
       email: employee.email || '', phone: employee.phone || '',
@@ -238,6 +243,11 @@ export default function EditEmployeePage() {
       ctc: Number(employee.ctc) || 0,
     });
   }, [employee]);
+
+  useEffect(() => {
+    const calculatedHra = Math.round((formData.basic_salary * hraPercentage) / 100);
+    setFormData(prev => ({ ...prev, hra: calculatedHra }));
+  }, [formData.basic_salary, hraPercentage]);
 
   const toggleAllowance = (type: string, enabled: boolean) => {
     setAllowancesState(prev => ({ ...prev, [type]: enabled }));
@@ -282,10 +292,9 @@ export default function EditEmployeePage() {
   }, [formData.basic_salary, formData.hra, formData.bonus, formData.pf_percentage, totalAllowances]);
 
   useEffect(() => {
-    if (formData.pt_state) {
-      const gross = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
-      setFormData(prev => ({ ...prev, pt_amount: calculatePT(prev.pt_state, gross) }));
-    }
+    const gross = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
+    const calculatedPt = formData.pt_state ? calculatePT(formData.pt_state, gross) : 0;
+    setFormData(prev => ({ ...prev, pt_amount: calculatedPt }));
   }, [formData.pt_state, formData.basic_salary, formData.hra, formData.bonus, totalAllowances]);
 
   const grossSalary = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
@@ -604,8 +613,22 @@ export default function EditEmployeePage() {
                 <FormField label="Basic Salary">
                   <Input type="number" value={formData.basic_salary || 0} onChange={(e) => handleChange('basic_salary', Number(e.target.value))} className="h-9" min={0} step="0.01" />
                 </FormField>
-                <FormField label="HRA">
-                  <Input type="number" value={formData.hra || 0} onChange={(e) => handleChange('hra', Number(e.target.value))} className="h-9" min={0} step="0.01" />
+                <FormField label={`HRA (%) ${formData.hra > 0 ? `· ${formatCurrency(formData.hra)}` : ''}`}>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 40"
+                      value={hraPercentage || ''}
+                      onChange={(e) => {
+                        const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                        setHraPercentage(val);
+                      }}
+                      className="h-9 pr-7"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                  </div>
                 </FormField>
                 <FormField label="Bonus">
                   <Input type="number" value={formData.bonus || 0} onChange={(e) => handleChange('bonus', Number(e.target.value))} className="h-9" min={0} step="0.01" />

@@ -98,7 +98,7 @@ export default function EmployeeDetailPage() {
   const router = useRouter();
   const params = useParams();
   const employeeId = params?.id as string;
-  const { hasPermission } = useAuthStore();
+  const { hasPermission, hasRole, user } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -156,6 +156,10 @@ export default function EmployeeDetailPage() {
 
   const canEdit = hasPermission('edit employees');
 
+  const isAdminOrHR = hasRole('admin') || hasRole('super_admin') || hasRole('super admin') || hasRole('hr');
+  const isOwnProfile = user?.employee_id === Number(employeeId) || user?.employee?.id === Number(employeeId);
+  const showSensitive = isAdminOrHR || isOwnProfile;
+
   // Salary calculations
   const grossSalary = (employee.basic_salary || 0) + (employee.hra || 0) + (employee.allowances || 0) + (employee.bonus || 0);
   const totalDeductions = (employee.pf_deduction || 0) + (employee.esi_employee || 0) + (employee.pt_amount || 0) + (employee.tds_amount || 0) + (employee.other_deductions || 0);
@@ -179,7 +183,7 @@ export default function EmployeeDetailPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800">{employee.full_name}</h2>
               <p className="text-sm text-slate-400">
-                {employee.employee_code} • {empTypeLabels[employee.employment_type]} •{' '}
+                {employee.employee_code} • {desigData?.title || employee.designation?.title || 'No Designation'} • {empTypeLabels[employee.employment_type]} •{' '}
                 <Badge variant="outline" className={statusColors[employee.status]}>{employee.status}</Badge>
               </p>
             </div>
@@ -223,16 +227,18 @@ export default function EmployeeDetailPage() {
           </SectionCard>
 
           {/* Identity Documents */}
-          <SectionCard title="Identity Documents" icon={FileBadge}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <DetailRow label="PAN" value={employee.pan_number?.toUpperCase()} copyable />
-              <DetailRow label="Aadhaar" value={employee.aadhaar_number ? employee.aadhaar_number.replace(/(\d{4})/g, '$1 ').trim() : null} copyable />
-              <DetailRow label="Driving License" value={employee.driving_license} copyable />
-              <DetailRow label="Passport" value={employee.passport_number} copyable />
-              <DetailRow label="Voter ID" value={employee.voter_id} copyable />
-              <DetailRow label="UAN (EPF)" value={employee.uan_number} copyable />
-            </div>
-          </SectionCard>
+          {showSensitive && (
+            <SectionCard title="Identity Documents" icon={FileBadge}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DetailRow label="PAN" value={employee.pan_number?.toUpperCase()} copyable />
+                <DetailRow label="Aadhaar" value={employee.aadhaar_number ? employee.aadhaar_number.replace(/(\d{4})/g, '$1 ').trim() : null} copyable />
+                <DetailRow label="Driving License" value={employee.driving_license} copyable />
+                <DetailRow label="Passport" value={employee.passport_number} copyable />
+                <DetailRow label="Voter ID" value={employee.voter_id} copyable />
+                <DetailRow label="UAN (EPF)" value={employee.uan_number} copyable />
+              </div>
+            </SectionCard>
+          )}
 
           {/* Employment Details */}
           <SectionCard title="Employment Details" icon={Briefcase}>
@@ -260,89 +266,93 @@ export default function EmployeeDetailPage() {
           </SectionCard>
 
           {/* Bank Details */}
-          <SectionCard title="Bank Details" icon={CreditCard}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <DetailRow label="Bank Name" value={employee.bank_name} />
-              <DetailRow label="Account Number" value={employee.bank_account_number} copyable />
-              <DetailRow label="IFSC Code" value={employee.bank_ifsc?.toUpperCase()} copyable />
-              <DetailRow label="Branch" value={employee.bank_branch} />
-            </div>
-          </SectionCard>
+          {showSensitive && (
+            <SectionCard title="Bank Details" icon={CreditCard}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DetailRow label="Bank Name" value={employee.bank_name} />
+                <DetailRow label="Account Number" value={employee.bank_account_number} copyable />
+                <DetailRow label="IFSC Code" value={employee.bank_ifsc?.toUpperCase()} copyable />
+                <DetailRow label="Branch" value={employee.bank_branch} />
+              </div>
+            </SectionCard>
+          )}
         </div>
 
         {/* Right Column - Salary Breakdown */}
         <div className="space-y-6">
-          <SectionCard title="Salary Structure" icon={Banknote}>
-            <div className="space-y-4">
-              {/* Earnings */}
-              <div>
-                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Earnings (Monthly)</h4>
-                <div className="space-y-1.5">
-                  <DetailRow label="Basic Salary" value={formatCurrency(employee.basic_salary)} />
-                  <DetailRow label="HRA" value={formatCurrency(employee.hra)} />
-                  <DetailRow label="Allowances" value={formatCurrency(employee.allowances)} />
-                  <DetailRow label="Bonus" value={formatCurrency(employee.bonus)} />
-                  <div className="border-t border-slate-100 pt-2 mt-2">
-                    <DetailRow label="Gross Salary" value={<span className="font-semibold text-slate-700">{formatCurrency(grossSalary)}</span>} />
+          {showSensitive && (
+            <SectionCard title="Salary Structure" icon={Banknote}>
+              <div className="space-y-4">
+                {/* Earnings */}
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Earnings (Monthly)</h4>
+                  <div className="space-y-1.5">
+                    <DetailRow label="Basic Salary" value={formatCurrency(employee.basic_salary)} />
+                    <DetailRow label="HRA" value={formatCurrency(employee.hra)} />
+                    <DetailRow label="Allowances" value={formatCurrency(employee.allowances)} />
+                    <DetailRow label="Bonus" value={formatCurrency(employee.bonus)} />
+                    <div className="border-t border-slate-100 pt-2 mt-2">
+                      <DetailRow label="Gross Salary" value={<span className="font-semibold text-slate-700">{formatCurrency(grossSalary)}</span>} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Deductions */}
-              <div>
-                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Deductions (Monthly)</h4>
-                <div className="space-y-1.5">
-                  <DetailRow 
-                    label={`PF (${employee.pf_percentage || 0}%)`} 
-                    value={formatCurrency(employee.pf_deduction)} 
-                  />
-                  <DetailRow label="ESI (Employee)" value={formatCurrency(employee.esi_employee)} />
-                  <DetailRow 
-                    label={`PT ${employee.pt_state ? `(${employee.pt_state})` : ''}`} 
-                    value={
-                      <span className={ptStateInfo?.hasPT === false ? 'text-red-500' : ''}>
-                        {formatCurrency(employee.pt_amount)}
-                        {ptStateInfo?.hasPT === false && <span className="text-xs ml-1">(N/A)</span>}
-                      </span>
-                    } 
-                  />
-                  <DetailRow label="TDS" value={formatCurrency(employee.tds_amount)} />
-                  <DetailRow label="Other" value={formatCurrency(employee.other_deductions)} />
-                  <div className="border-t border-slate-100 pt-2 mt-2">
-                    <DetailRow label="Total Deductions" value={<span className="font-semibold text-red-600">- {formatCurrency(totalDeductions)}</span>} />
+                {/* Deductions */}
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Deductions (Monthly)</h4>
+                  <div className="space-y-1.5">
+                    <DetailRow 
+                      label={`PF (${employee.pf_percentage || 0}%)`} 
+                      value={formatCurrency(employee.pf_deduction)} 
+                    />
+                    <DetailRow label="ESI (Employee)" value={formatCurrency(employee.esi_employee)} />
+                    <DetailRow 
+                      label={`PT ${employee.pt_state ? `(${employee.pt_state})` : ''}`} 
+                      value={
+                        <span className={ptStateInfo?.hasPT === false ? 'text-red-500' : ''}>
+                          {formatCurrency(employee.pt_amount)}
+                          {ptStateInfo?.hasPT === false && <span className="text-xs ml-1">(N/A)</span>}
+                        </span>
+                      } 
+                    />
+                    <DetailRow label="TDS" value={formatCurrency(employee.tds_amount)} />
+                    <DetailRow label="Other" value={formatCurrency(employee.other_deductions)} />
+                    <div className="border-t border-slate-100 pt-2 mt-2">
+                      <DetailRow label="Total Deductions" value={<span className="font-semibold text-red-600">- {formatCurrency(totalDeductions)}</span>} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Summary */}
-              <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-500">Net Salary</span>
-                  <span className="text-lg font-bold text-slate-800">{formatCurrency(netSalary)}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400">Annual CTC</span>
-                  <span className="font-medium text-slate-600">{formatCurrency(annualCTC)}</span>
-                </div>
-                {employee.esi_employer > 0 && (
-                  <div className="text-xs text-slate-400 pt-1 border-t border-slate-200">
-                    Employer ESI: {formatCurrency(employee.esi_employer)}/month
+                {/* Summary */}
+                <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">Net Salary</span>
+                    <span className="text-lg font-bold text-slate-800">{formatCurrency(netSalary)}</span>
                   </div>
-                )}
-              </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Annual CTC</span>
+                    <span className="font-medium text-slate-600">{formatCurrency(annualCTC)}</span>
+                  </div>
+                  {employee.esi_employer > 0 && (
+                    <div className="text-xs text-slate-400 pt-1 border-t border-slate-200">
+                      Employer ESI: {formatCurrency(employee.esi_employer)}/month
+                    </div>
+                  )}
+                </div>
 
-              {/* Quick Actions */}
-              <div className="pt-2 border-t border-slate-100">
-                <Button variant="outline" size="sm" className="w-full justify-center gap-2 h-9">
-                  <FileText size={14} /> Generate Payslip
-                </Button>
+                {/* Quick Actions */}
+                <div className="pt-2 border-t border-slate-100">
+                  <Button variant="outline" size="sm" className="w-full justify-center gap-2 h-9">
+                    <FileText size={14} /> Generate Payslip
+                  </Button>
+                </div>
               </div>
-            </div>
-          </SectionCard>
+            </SectionCard>
+          )}
 
           {/* Quick Stats */}
           <SectionCard title="Quick Stats" icon={Shield}>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={showSensitive ? "grid grid-cols-2 gap-3" : "block text-center"}>
               <div className="bg-slate-50 rounded-lg p-3 text-center">
                 <p className="text-xs text-slate-400">Tenure</p>
                 <p className="text-sm font-semibold text-slate-700">
@@ -351,12 +361,32 @@ export default function EmployeeDetailPage() {
                     : '—'}
                 </p>
               </div>
-              <div className="bg-slate-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-400">PF Balance</p>
-                <p className="text-sm font-semibold text-slate-700">{formatCurrency((employee.pf_deduction || 0) * 12)}</p>
-              </div>
+              {showSensitive && (
+                <div className="bg-slate-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-400">PF Balance</p>
+                  <p className="text-sm font-semibold text-slate-700">{formatCurrency((employee.pf_deduction || 0) * 12)}</p>
+                </div>
+              )}
             </div>
           </SectionCard>
+
+          {/* Roles */}
+          {showSensitive && (
+            <SectionCard title="Roles" icon={Briefcase}>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                  <span className="text-sm text-slate-400">Current Role</span>
+                  <span className="text-sm font-medium text-slate-700">{desigData?.title || employee.designation?.title || '—'}</span>
+                </div>
+                {employee.previous_designation && (
+                  <div className="flex justify-between items-center py-2 last:border-0">
+                    <span className="text-sm text-slate-400">Previous Role</span>
+                    <span className="text-sm font-medium text-slate-700">{employee.previous_designation}</span>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          )}
         </div>
       </div>
     </div>

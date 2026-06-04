@@ -6,14 +6,13 @@ import { useAuthStore } from '@/store/authStore';
 import type {
   Payroll,
   PayrollItem,
-  PayslipRequest,
   PayrollPaginationMeta,
   GeneratePayrollPayload,
 } from '@/types/payroll';
 
 import {
   IndianRupee, CheckCircle2, Clock, Mail, Loader2, Send,
-  Check, X, Inbox, FileText, Plus, ChevronDown, ChevronUp,
+  Check, X, FileText, Plus, ChevronDown, ChevronUp,
   TrendingUp, Printer, BarChart3, CreditCard, Square,
   CheckSquare, MinusSquare, Filter, Calendar, Users,
 } from 'lucide-react';
@@ -23,9 +22,16 @@ import { toast } from 'sonner';
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface UserProfile { id: number; name: string; email: string; role: string; }
 interface Employee {
-  id: number; first_name: string; last_name: string;
+  id: number;
+  first_name: string;
+  last_name: string;
+  employee_id?: string;
+  joining_date?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  pan_number?: string;
   department?: { id: number; name: string; };
-  designation?: { name: string; };
+  designation?: { title: string; name?: string; };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -89,9 +95,11 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
       <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 24px; }
-        .header { text-align: center; margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 10px; }
-        .header h1 { font-size: 16px; font-weight: bold; }
-        .header p { font-size: 10px; color: #444; }
+        .header { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 10px; }
+        .logo { width: 44px; height: 44px; object-fit: contain; }
+        .header-text { text-align: left; }
+        .header h1 { font-size: 16px; font-weight: bold; margin: 0; }
+        .header p { font-size: 10px; color: #444; margin-top: 2px; }
         .title { text-align: center; font-size: 13px; font-weight: bold; margin: 10px 0; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #999; margin-bottom: 14px; }
         .info-col { padding: 8px 12px; }
@@ -131,11 +139,14 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
           </div>
         </div>
         <div id="payslip-print-area" className="p-6 text-[11px] text-gray-800 font-[Arial,sans-serif]">
-          <div className="header border-b-2 border-gray-900 pb-3 mb-4 text-center">
-            <h1 className="text-base font-bold">{companyName || 'Techsprout AI Labs'}</h1>
-            <p className="text-[10px] text-gray-500 mt-0.5">
-              8-2-293/82/A/787/1/4F/1, Road No36, 4th Floor, Jubilee Hills, Hyderabad, Shaikpet, Telangana, India, 500033
-            </p>
+          <div className="header border-b-2 border-gray-900 pb-3 mb-4 flex items-center justify-center gap-3">
+            <img src={`${typeof window !== 'undefined' ? window.location.origin : ''}/logo.png`} alt="Logo" className="w-11 h-11 object-contain logo" />
+            <div className="header-text text-left">
+              <h1 className="text-base font-bold">{companyName || 'Techsprout AI Labs'}</h1>
+              <p className="text-[10px] text-gray-500 mt-0.5">
+                8-2-293/82/A/787/1/4F/1, Road No36, 4th Floor, Jubilee Hills, Hyderabad, Shaikpet, Telangana, India, 500033
+              </p>
+            </div>
           </div>
           <div className="title text-center font-bold text-sm mb-3">
             Payslip for the month of {monthName} {payroll.year}
@@ -144,8 +155,8 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
             <div className="info-col p-2 space-y-1">
               {[
                 ['Name:', `${payroll.employee.first_name} ${payroll.employee.last_name}`],
-                ['Joining Date:', '—'],
-                ['Designation:', payroll.employee.designation?.name ?? '—'],
+                ['Joining Date:', payroll.employee.joining_date ? new Date(payroll.employee.joining_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
+                ['Designation:', payroll.employee.designation?.title ?? payroll.employee.designation?.name ?? '—'],
                 ['Department:', payroll.employee.department?.name ?? '—'],
                 ['Location:', 'Hyderabad'],
               ].map(([l, v]) => (
@@ -158,9 +169,9 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
             <div className="info-col p-2 border-l border-gray-400 space-y-1">
               {[
                 ['Employee ID:', payroll.employee.employee_id ?? String(payroll.employee.id)],
-                ['Bank Name:', '—'],
-                ['Bank Account No:', 'xxxxxxxxxx'],
-                ['PAN Number:', 'xxxxxxxxxx'],
+                ['Bank Name:', payroll.employee.bank_name ?? '—'],
+                ['Bank Account No:', payroll.employee.bank_account_number ?? '—'],
+                ['PAN Number:', payroll.employee.pan_number ?? '—'],
                 ['Effective Work Days:', String(payroll.working_days)],
                 ['LOP:', String(payroll.lop_days)],
               ].map(([l, v]) => (
@@ -222,15 +233,14 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
 }
 
 // ─── Expanded Payroll Row ─────────────────────────────────────────────────────
-function ExpandedRow({ payroll, isAdmin, emailingId, requestingId,
-  selected, onSelect, onMarkPaid, onEmail, onRequestPayslip, onViewPayslip,
+function ExpandedRow({ payroll, isAdmin, emailingId,
+  selected, onSelect, onMarkPaid, onEmail, onViewPayslip,
 }: {
   payroll: Payroll; isAdmin: boolean;
-  emailingId: number | null; requestingId: number | null;
+  emailingId: number | null;
   selected: boolean; onSelect: (id: number, checked: boolean) => void;
   onMarkPaid: (id: number) => void;
   onEmail: (id: number) => void;
-  onRequestPayslip: (id: number) => void;
   onViewPayslip: (payroll: Payroll) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -289,12 +299,7 @@ function ExpandedRow({ payroll, isAdmin, emailingId, requestingId,
             <button onClick={() => onViewPayslip(payroll)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm">
               <FileText size={12} /> Payslip
             </button>
-            {!isAdmin && payroll.status !== 'paid' && (
-              <button onClick={() => onRequestPayslip(payroll.id)} disabled={requestingId === payroll.id}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition disabled:opacity-60 shadow-sm">
-                {requestingId === payroll.id ? <Loader2 size={12} className="animate-spin" /> : <><Send size={12} /> Request</>}
-              </button>
-            )}
+
             <button onClick={() => setExpanded(e => !e)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition">
               {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
@@ -533,7 +538,6 @@ function UniversalFilterBar({ filters, employees, departments, isAdmin, onFilter
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PayrollPage() {
-  const [activeTab, setActiveTab] = useState<'register' | 'requests'>('register');
   const [companyName, setCompanyName] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('company_name') || 'Techsprout AI Labs';
@@ -541,12 +545,9 @@ export default function PayrollPage() {
     return 'Techsprout AI Labs';
   });
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
-  const [requests, setRequests] = useState<PayslipRequest[]>([]);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<PayrollPaginationMeta | null>(null);
   const [emailingId, setEmailingId] = useState<number | null>(null);
-  const [requestingId, setRequestingId] = useState<number | null>(null);
-  const [processingReqId, setProcessingReqId] = useState<number | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -647,32 +648,22 @@ export default function PayrollPage() {
   async function loadData(p = 1) {
     setLoadingData(true);
     try {
-      if (isAdmin && activeTab === 'requests') {
-        const params: any = { page: p, per_page: 10 };
-        if (filters.status) params.status = filters.status;
+      const params: any = { page: p, per_page: 10 };
+      
+      // Apply filters for both admin and employee
+      if (filters.month) params.month = filters.month;
+      if (filters.year) params.year = filters.year;
+      if (filters.status) params.status = filters.status;
+      
+      // Admin-only filters
+      if (isAdmin) {
         if (filters.employee_id) params.employee_id = filters.employee_id;
-        
-        const r = await api.get('/payroll-requests', { params });
-        setRequests(r.data.data ?? []);
-        setMeta(r.data.meta ?? null);
-      } else {
-        const params: any = { page: p, per_page: 10 };
-        
-        // Apply filters for both admin and employee
-        if (filters.month) params.month = filters.month;
-        if (filters.year) params.year = filters.year;
-        if (filters.status) params.status = filters.status;
-        
-        // Admin-only filters
-        if (isAdmin) {
-          if (filters.employee_id) params.employee_id = filters.employee_id;
-          if (filters.department_id) params.department_id = filters.department_id;
-        }
-        
-        const r = await api.get('/payrolls', { params });
-        setPayrolls(r.data.data ?? []);
-        setMeta(r.data.meta ?? null);
+        if (filters.department_id) params.department_id = filters.department_id;
       }
+      
+      const r = await api.get('/payrolls', { params });
+      setPayrolls(r.data.data ?? []);
+      setMeta(r.data.meta ?? null);
     } catch (e) {
       console.error('Error loading data:', e);
       toast.error('Failed to load payroll data');
@@ -687,7 +678,7 @@ export default function PayrollPage() {
       setSelectedIds([]);
       loadData(1);
     }
-  }, [activeTab, loadingUser]);
+  }, [loadingUser]);
 
   useEffect(() => {
     if (!loadingUser && page > 1) loadData(page);
@@ -773,30 +764,7 @@ export default function PayrollPage() {
     }
   }
 
-  async function requestPayslip(id: number) {
-    setRequestingId(id);
-    try {
-      await api.post(`/payrolls/${id}/request-payslip`);
-      toast.success('Request sent to HR.');
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Failed to submit request.');
-    } finally {
-      setRequestingId(null);
-    }
-  }
 
-  async function fulfillRequest(id: number, status: 'approved' | 'rejected') {
-    setProcessingReqId(id);
-    try {
-      await api.patch(`/payroll-requests/${id}/fulfill`, { status });
-      toast.success(`Request ${status}.`);
-      loadData(page);
-    } catch {
-      toast.error('Failed to update request.');
-    } finally {
-      setProcessingReqId(null);
-    }
-  }
 
   async function handleBulkMarkPaid() {
     if (selectedIds.length === 0) return;
@@ -850,30 +818,20 @@ export default function PayrollPage() {
             {isAdmin ? 'Payroll Center' : 'My Salary Slips'}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {isAdmin ? 'Manage payroll records and employee payslip requests' : 'View and request your historical pay statements'}
+            {isAdmin ? 'Manage payroll records and process employee salaries' : 'View your historical pay statements'}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {isAdmin && activeTab === 'register' && (
+          {isAdmin && (
             <button onClick={openGenModal} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition shadow-sm">
               <Plus size={15} /> Generate Payroll
             </button>
-          )}
-          {isAdmin && (
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-              {(['register', 'requests'] as const).map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                  {tab === 'requests' && <Inbox size={12} />}
-                  {tab === 'register' ? 'Payroll Register' : 'Employee Requests'}
-                </button>
-              ))}
-            </div>
           )}
         </div>
       </div>
 
       {/* Metric Cards - Admin Only */}
-      {isAdmin && activeTab === 'register' && (
+      {isAdmin && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
             { icon: IndianRupee, label: 'Total Net Payroll', value: `₹${fmt(totalNet)}`, bg: 'bg-green-50', ic: 'text-green-600' },
@@ -895,21 +853,19 @@ export default function PayrollPage() {
       )}
 
       {/* UNIVERSAL FILTER BAR - Works for both Admin and Employee */}
-      {activeTab === 'register' && (
-        <UniversalFilterBar
-          filters={filters}
-          employees={employees}
-          departments={departments}
-          isAdmin={isAdmin}
-          onFilterChange={handleFilterChange}
-          onApply={applyFilters}
-          onReset={resetFilters}
-          loading={filterLoading}
-        />
-      )}
+      <UniversalFilterBar 
+        filters={filters}
+        employees={employees}
+        departments={departments}
+        isAdmin={isAdmin}
+        onFilterChange={handleFilterChange}
+        onApply={applyFilters}
+        onReset={resetFilters}
+        loading={filterLoading}
+      />
 
       {/* Bulk Action Bar - Admin Only */}
-      {isAdmin && activeTab === 'register' && selectedIds.length > 0 && (
+      {isAdmin && selectedIds.length > 0 && (
         <BulkActionBar 
           selectedIds={selectedIds} 
           onMarkPaid={handleBulkMarkPaid} 
@@ -925,7 +881,7 @@ export default function PayrollPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
           </div>
-        ) : activeTab === 'register' ? (
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-100">
@@ -972,63 +928,12 @@ export default function PayrollPage() {
                       payroll={p}
                       isAdmin={isAdmin}
                       emailingId={emailingId}
-                      requestingId={requestingId}
                       selected={selectedIds.includes(p.id)}
                       onSelect={handleSelectOne}
                       onMarkPaid={markPaid}
                       onEmail={sendEmail}
-                      onRequestPayslip={requestPayslip}
                       onViewPayslip={openPayslip}
                     />
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>
-                  {['Employee', 'Period Requested', 'Net Compensation', 'Status', 'Actions'].map(h => (
-                    <th key={h} className={`px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {requests.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-center py-14 text-sm text-slate-300">No active requests.</td>
-                  </tr>
-                ) : (
-                  requests.map(req => (
-                    <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-slate-800">{req.employee.first_name} {req.employee.last_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{req.employee.department?.name ?? '—'}</p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{MONTHS[req.payroll.month - 1]} {req.payroll.year}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-slate-700">₹{fmt(req.payroll.net_salary)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${req.status === 'approved' ? 'bg-green-50 text-green-700 border border-green-200' : req.status === 'rejected' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'}`}>
-                          {req.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        {req.status === 'pending' ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button onClick={() => fulfillRequest(req.id, 'approved')} disabled={processingReqId === req.id} className="w-8 h-8 rounded-lg border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 flex items-center justify-center transition" title="Approve">
-                              <Check size={14} />
-                            </button>
-                            <button onClick={() => fulfillRequest(req.id, 'rejected')} disabled={processingReqId === req.id} className="w-8 h-8 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition" title="Reject">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-300 font-medium">Processed</span>
-                        )}
-                      </td>
-                    </tr>
                   ))
                 )}
               </tbody>

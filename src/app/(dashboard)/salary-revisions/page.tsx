@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useEmployees, useEmployee } from '@/hooks/useEmployees';
+import { useDesignations } from '@/hooks/useDesignations';
 import { salaryRevisionService, SalaryRevision } from '@/services/salaryRevisionService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,9 +34,17 @@ export default function SalaryRevisionsPage() {
   const [reason, setReason] = useState('Annual Appraisal');
   const [submitPending, setSubmitPending] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  
+  // HRA percentage & Promotion designation states
+  const [hraPercentage, setHraPercentage] = useState('');
+  const [newDesignationId, setNewDesignationId] = useState('');
 
   // Load active employees for admin dropdown
   const { data: employees = [] } = useEmployees();
+  
+  // Load designations for promotion dropdown
+  const { data: designationsRes } = useDesignations({ per_page: 500 });
+  const designations = designationsRes?.data || [];
 
   // Load current user's employee details if they are a regular employee
   const myEmployeeId = user?.employee_id;
@@ -102,6 +111,8 @@ export default function SalaryRevisionsPage() {
     setSelectedEmpId('');
     setNewBasic('');
     setNewHra('');
+    setHraPercentage('');
+    setNewDesignationId('');
     setNewAllowances('');
     setNewBonus('');
     setEffectiveDate(new Date().toISOString().split('T')[0]);
@@ -114,11 +125,33 @@ export default function SalaryRevisionsPage() {
     const emp = employees.find(e => e.id === Number(empId));
     if (emp) {
       // Auto fill new fields with current values as a starting base
+      const basicVal = Number(emp.basic_salary || 0);
+      const hraVal = Number(emp.hra || 0);
       setNewBasic(String(emp.basic_salary || ''));
       setNewHra(String(emp.hra || ''));
       setNewAllowances(String(emp.total_allowances || emp.allowances || ''));
       setNewBonus(String(emp.bonus || ''));
+      setNewDesignationId(String(emp.designation_id || ''));
+      
+      const percentage = basicVal > 0 ? Math.round((hraVal / basicVal) * 100) : 0;
+      setHraPercentage(String(percentage));
     }
+  };
+
+  const handleBasicChange = (val: string) => {
+    setNewBasic(val);
+    const basicVal = Number(val) || 0;
+    const percentVal = Number(hraPercentage) || 0;
+    if (percentVal > 0) {
+      setNewHra(String(Math.round((basicVal * percentVal) / 100)));
+    }
+  };
+
+  const handleHraPercentageChange = (val: string) => {
+    setHraPercentage(val);
+    const percentVal = Number(val) || 0;
+    const basicVal = Number(newBasic) || 0;
+    setNewHra(String(Math.round((basicVal * percentVal) / 100)));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,6 +162,10 @@ export default function SalaryRevisionsPage() {
     }
     if (!newBasic || !effectiveDate || !reason) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+    if (reason === 'Promotion' && !newDesignationId) {
+      toast.error('Please select a target designation for the promotion');
       return;
     }
 
@@ -142,6 +179,7 @@ export default function SalaryRevisionsPage() {
         new_bonus: Number(newBonus),
         effective_date: effectiveDate,
         reason,
+        ...(reason === 'Promotion' && newDesignationId ? { new_designation_id: Number(newDesignationId) } : {}),
       });
       toast.success('Appraisal revision submitted and activated!');
       fetchRevisions();
@@ -467,7 +505,7 @@ export default function SalaryRevisionsPage() {
                   <Input
                     type="number"
                     value={newBasic}
-                    onChange={(e) => setNewBasic(e.target.value)}
+                    onChange={(e) => handleBasicChange(e.target.value)}
                     placeholder="e.g. 35000"
                     className="h-10 border-slate-200 rounded-xl"
                     required
@@ -475,12 +513,15 @@ export default function SalaryRevisionsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">New HRA <span className="text-red-500">*</span></Label>
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs font-semibold text-slate-700">New HRA (%) <span className="text-red-500">*</span></Label>
+                    {newHra && <span className="text-[10px] font-bold text-slate-500">₹{Number(newHra).toLocaleString('en-IN')}</span>}
+                  </div>
                   <Input
                     type="number"
-                    value={newHra}
-                    onChange={(e) => setNewHra(e.target.value)}
-                    placeholder="e.g. 15000"
+                    value={hraPercentage}
+                    onChange={(e) => handleHraPercentageChange(e.target.value)}
+                    placeholder="e.g. 40"
                     className="h-10 border-slate-200 rounded-xl"
                     required
                   />
@@ -539,6 +580,34 @@ export default function SalaryRevisionsPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Promotion designation picker */}
+              {reason === 'Promotion' && selectedEmployee && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500">Current Designation:</span>
+                    <span className="font-bold text-slate-800">
+                      {selectedEmployee.designation?.title || 'None'}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Promote to Designation <span className="text-red-500">*</span></Label>
+                    <select
+                      value={newDesignationId}
+                      onChange={(e) => setNewDesignationId(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      required
+                    >
+                      <option value="">Select target designation...</option>
+                      {designations.map((d: any) => (
+                        <option key={d.id} value={d.id}>
+                          {d.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Real-time Appraisal comparison panel */}
               {selectedEmpId && (

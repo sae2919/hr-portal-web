@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCreateEmployee, useManagers } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useDesignations } from '@/hooks/useDesignations';
@@ -198,6 +198,7 @@ export default function CreateEmployeePage() {
   const [tdsEnabled, setTdsEnabled] = useState(false);
   const [showOtherDocs, setShowOtherDocs] = useState(false);
   const [pfPercentage, setPfPercentage] = useState(0);
+  const [hraPercentage, setHraPercentage] = useState<number>(0);
   const [allowancesState, setAllowancesState] = useState({
     transport: false, food: false, medical: false, special: false, other: false,
   });
@@ -218,6 +219,11 @@ export default function CreateEmployeePage() {
   const otherDed   = watch('other_deductions') || 0;
   const tdsAmt     = watch('tds_amount')   || 0;
   const ptState    = watch('pt_state')     || '';
+
+  useEffect(() => {
+    const calculatedHra = Math.round((basic * hraPercentage) / 100);
+    setValue('hra', calculatedHra, { shouldValidate: true });
+  }, [basic, hraPercentage, setValue]);
 
   const totalAllowances = allowances.reduce((s, a) => s + (a?.amount || 0), 0);
   const gross = basic + hra + totalAllowances + bonus;
@@ -543,11 +549,21 @@ export default function CreateEmployeePage() {
                       {...register('basic_salary', { valueAsNumber: true })} className="h-9 pl-7" />
                   </div>
                 </Field>
-                <Field label="HRA">
+                <Field label={`HRA (%) ${hra > 0 ? `· ${fmt(hra)}` : ''}`}>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                    <Input type="number" min="0" placeholder="20000"
-                      {...register('hra', { valueAsNumber: true })} className="h-9 pl-7" />
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 40"
+                      value={hraPercentage || ''}
+                      onChange={(e) => {
+                        const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                        setHraPercentage(val);
+                      }}
+                      className="h-9 pr-7"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
                   </div>
                 </Field>
                 <Field label="Bonus">
@@ -657,15 +673,23 @@ export default function CreateEmployeePage() {
 
                   <div className="space-y-1">
                     <Label className="text-sm font-medium text-slate-600">Professional Tax</Label>
-                    <select {...register('pt_state')}
-                      className={`w-full border rounded-lg px-3 text-sm h-9 focus:outline-none focus:ring-2 transition-colors bg-white ${
-                        ptState && ptIsNoTax ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-500/20' : 'border-slate-200 focus:ring-blue-500/20'
-                      }`}>
-                      <option value="">Select state for PT</option>
-                      {PT_STATES.map(s => (
-                        <option key={s} value={s}>{s}{isNoPTState(s) ? ' (No PT)' : ''}</option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select {...register('pt_state')}
+                        className={`flex-1 border rounded-lg px-3 text-sm h-9 focus:outline-none focus:ring-2 transition-colors bg-white ${
+                          ptState && ptIsNoTax ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-500/20' : 'border-slate-200 focus:ring-blue-500/20'
+                        }`}>
+                        <option value="">Select state for PT</option>
+                        {PT_STATES.map(s => (
+                          <option key={s} value={s}>{s}{isNoPTState(s) ? ' (No PT)' : ''}</option>
+                        ))}
+                      </select>
+                      <div className="w-32 h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 flex items-center gap-1">
+                        <span className="text-sm text-slate-400">₹</span>
+                        <span className="text-sm font-semibold text-slate-700">
+                          {Math.round(ptAmount).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
                     {!ptState && <p className="text-xs text-slate-400">Select state to auto-calculate PT</p>}
                     {ptState && ptIsNoTax && (
                       <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={10} />No PT in {ptState}</p>

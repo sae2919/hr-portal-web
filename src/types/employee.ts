@@ -45,6 +45,7 @@ export interface Employee {
   other_deductions?: number;
   ctc?: number;
   created_at: string;
+  previous_designation?: string | null;
 }
 
 export interface StoreEmployeePayload {
