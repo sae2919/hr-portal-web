@@ -52,10 +52,13 @@ export function NotificationPanel() {
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
   const fetchNotifications = async () => {
-    setLoading(true);
-    const res = await notificationService.getAll();
-    if (res.success) setNotifications(res.data);
-    setLoading(false);
+    setTimeout(() => setLoading(true), 0);
+    try {
+      const res = await notificationService.getAll();
+      if (res.success) setNotifications(res.data);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Fetch on mount (for the red dot indicator)

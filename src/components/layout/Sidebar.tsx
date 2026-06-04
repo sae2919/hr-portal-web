@@ -125,7 +125,10 @@ export function Sidebar({ userRole }: { userRole: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuthStore();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [branding, setBranding] = useState({
     name: 'Techsprout',
@@ -137,10 +140,12 @@ export function Sidebar({ userRole }: { userRole: string }) {
     const cachedName = localStorage.getItem('company_name');
     const cachedLogo = localStorage.getItem('company_logo');
     if (cachedName || cachedLogo) {
-      setBranding({
-        name: cachedName || 'Techsprout',
-        logo: cachedLogo || '/logo.png',
-      });
+      setTimeout(() => {
+        setBranding({
+          name: cachedName || 'Techsprout',
+          logo: cachedLogo || '/logo.png',
+        });
+      }, 0);
     }
 
     // 2. Fetch fresh settings in background
