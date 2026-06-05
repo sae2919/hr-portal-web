@@ -110,6 +110,7 @@ interface Asset {
 // ────────────────────────────────────────────────────────────────
 
 const documentTypes = [
+  { value: 'onboarding_form', label: 'Onboarding Details Form', icon: FileCheck, required: false },
   { value: 'resume', label: 'Resume/CV', icon: FileText, required: true },
   { value: 'id_proof', label: 'ID Proof', icon: Shield, required: true },
   { value: 'address_proof', label: 'Address Proof', icon: FileCheck, required: true },
@@ -511,6 +512,31 @@ export default function OnboardingPage() {
     }
   };
 
+  // View document inline in a new tab
+  const viewDocument = async (documentId: number, originalName: string) => {
+    try {
+      const response = await api.get(`/onboarding/documents/${documentId}/download`, {
+        responseType: 'blob',
+      });
+      
+      // Determine content type
+      let contentType = response.headers['content-type'] || response.data.type || 'application/octet-stream';
+      if (contentType === 'application/octet-stream' || !contentType) {
+        const ext = originalName.split('.').pop()?.toLowerCase();
+        if (ext === 'pdf') contentType = 'application/pdf';
+        else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+        else if (ext === 'png') contentType = 'image/png';
+        else if (ext === 'gif') contentType = 'image/gif';
+      }
+      
+      const file = new Blob([response.data], { type: contentType });
+      const fileURL = URL.createObjectURL(file);
+      window.open(fileURL, '_blank');
+    } catch (error) {
+      toast.error('Failed to open document for viewing');
+    }
+  };
+
   // Generate offer letter
   const handleGenerateOfferLetter = async () => {
     if (!selectedRequest) return;
@@ -904,7 +930,7 @@ export default function OnboardingPage() {
       {/* ──────────────────────────────────────────────────────────────── */}
       {selectedRequest && (
         <Dialog open={!!selectedRequest} onOpenChange={() => setSelectedRequest(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6">
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-slate-800">Candidate Onboarding File</DialogTitle>
               <DialogDescription className="text-xs">
@@ -1025,6 +1051,13 @@ export default function OnboardingPage() {
                           {doc && (
                             <>
                               {getDocumentStatusIcon(doc.status)}
+                              <button
+                                onClick={() => viewDocument(doc.id, doc.original_name)}
+                                className="p-1.5 hover:bg-white text-slate-400 hover:text-blue-600 rounded-lg transition"
+                                title="View Inline"
+                              >
+                                <Eye size={14} />
+                              </button>
                               <button
                                 onClick={() => downloadDocument(doc.id, doc.original_name)}
                                 className="p-1.5 hover:bg-white text-slate-400 hover:text-blue-600 rounded-lg transition"
@@ -1240,7 +1273,7 @@ export default function OnboardingPage() {
       {/* ──────────────────────────────────────────────────────────────── */}
       {selectedOffboarding && (
         <Dialog open={!!selectedOffboarding} onOpenChange={() => setSelectedOffboarding(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6">
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-slate-800">Employee Exit Procedure</DialogTitle>
               <DialogDescription className="text-xs">

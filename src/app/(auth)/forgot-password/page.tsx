@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import { ArrowLeft, Building2, Loader2, MailCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, MailCheck } from 'lucide-react';
 import { useForgotPassword } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,24 @@ type FormData = z.infer<typeof schema>;
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [sentTo, setSentTo] = useState('');
+  
+  const [branding, setBranding] = useState({
+    name: 'Techsprout',
+    logo: '/logo.png',
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const cachedName = localStorage.getItem('company_name');
+      const cachedLogo = localStorage.getItem('company_logo');
+      if (cachedName || cachedLogo) {
+        setBranding({
+          name: cachedName || 'Techsprout',
+          logo: cachedLogo || '/logo.png',
+        });
+      }
+    }
+  }, []);
 
   const { mutate: sendLink, isPending, error, isError } = useForgotPassword();
 
@@ -52,8 +70,8 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md">
 
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-            <Building2 className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 backdrop-blur-sm border border-white/10 rounded-2xl mb-4 p-2 overflow-hidden shadow-lg shadow-blue-500/5">
+            <img src={branding.logo} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-white">Forgot Password</h1>
           <p className="text-slate-400 text-sm mt-1">

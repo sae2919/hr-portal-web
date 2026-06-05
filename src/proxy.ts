@@ -5,6 +5,7 @@ const PUBLIC_ROUTES = [
   '/login',
   '/forgot-password',
   '/reset-password',
+  '/onboarding/candidate',
 ];
 
 export function proxy(request: NextRequest) {

@@ -1,12 +1,12 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, Building2, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useResetPassword } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,24 @@ function ResetPasswordForm() {
   const [showPw, setShowPw] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const searchParams = useSearchParams();
+
+  const [branding, setBranding] = useState({
+    name: 'Techsprout',
+    logo: '/logo.png',
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const cachedName = localStorage.getItem('company_name');
+      const cachedLogo = localStorage.getItem('company_logo');
+      if (cachedName || cachedLogo) {
+        setBranding({
+          name: cachedName || 'Techsprout',
+          logo: cachedLogo || '/logo.png',
+        });
+      }
+    }
+  }, []);
 
   const token = searchParams.get('token') || '';
   const email = searchParams.get('email') || '';
@@ -72,8 +90,8 @@ function ResetPasswordForm() {
   return (
     <>
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-          <Building2 className="w-8 h-8 text-white" />
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 backdrop-blur-sm border border-white/10 rounded-2xl mb-4 p-2 overflow-hidden shadow-lg shadow-blue-500/5">
+          <img src={branding.logo} alt="Logo" className="w-full h-full object-contain" />
         </div>
         <h1 className="text-2xl font-bold text-white">Set New Password</h1>
         <p className="text-slate-400 text-sm mt-1">

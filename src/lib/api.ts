@@ -28,7 +28,7 @@ const getBaseURL = (): string => {
   }
   
   // Fixed backend URL - use 127.0.0.1 consistently
-  return 'http://localhost:8000/api/v1';
+  return 'http://127.0.0.1:8000/api/v1';
 };
 
 const api = axios.create({
