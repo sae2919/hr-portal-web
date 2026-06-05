@@ -8,6 +8,7 @@ import { salaryRevisionService, SalaryRevision } from '@/services/salaryRevision
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   TrendingUp, Plus, Search, Loader2, Download, Calendar, 
   ChevronRight, ArrowRight, DollarSign, Award, X, Sparkles, User
@@ -15,6 +16,7 @@ import {
 import { toast } from 'sonner';
 
 export default function SalaryRevisionsPage() {
+  const queryClient = useQueryClient();
   const { user, hasPermission } = useAuthStore();
   const [mounted, setMounted] = useState(false);
   const [revisions, setRevisions] = useState<SalaryRevision[]>([]);
@@ -182,6 +184,8 @@ export default function SalaryRevisionsPage() {
         ...(reason === 'Promotion' && newDesignationId ? { new_designation_id: Number(newDesignationId) } : {}),
       });
       toast.success('Appraisal revision submitted and activated!');
+      queryClient.invalidateQueries({ queryKey: ['employee'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
       fetchRevisions();
       setModalOpen(false);
     } catch (err: any) {

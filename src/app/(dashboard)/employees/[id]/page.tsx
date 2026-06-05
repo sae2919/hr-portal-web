@@ -13,7 +13,7 @@ import api from '@/lib/api';
 import {
   ArrowLeft, Pencil, Loader2, AlertCircle, User, Mail, Phone,
   Calendar, Building2, Briefcase, FileText, CreditCard,
-  Banknote, Shield, Heart, MapPin, Home, FileBadge, Eye,
+  Banknote, Shield, Heart, MapPin, Home, FileBadge, Eye, EyeOff, Lock,
   CheckCircle, XCircle, Copy, ExternalLink
 } from 'lucide-react';
 
@@ -100,6 +100,9 @@ export default function EmployeeDetailPage() {
   const employeeId = params?.id as string;
   const { hasPermission, hasRole, user } = useAuthStore();
   const [mounted, setMounted] = useState(false);
+  const [revealSalary, setRevealSalary] = useState(false);
+  const [revealDocs, setRevealDocs] = useState(false);
+  const [revealBank, setRevealBank] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -113,26 +116,7 @@ export default function EmployeeDetailPage() {
     enabled: !!employeeId,
   });
 
-  // Fetch department & designation details
-  const { data: deptData } = useQuery({
-    queryKey: ['department', employee?.department_id],
-    queryFn: async () => {
-      if (!employee?.department_id) return null;
-      const res = await api.get(`/departments/${employee.department_id}`);
-      return res.data.data;
-    },
-    enabled: !!employee?.department_id,
-  });
 
-  const { data: desigData } = useQuery({
-    queryKey: ['designation', employee?.designation_id],
-    queryFn: async () => {
-      if (!employee?.designation_id) return null;
-      const res = await api.get(`/designations/${employee.designation_id}`);
-      return res.data.data;
-    },
-    enabled: !!employee?.designation_id,
-  });
 
   if (!mounted || isLoading) {
     return (
@@ -160,11 +144,27 @@ export default function EmployeeDetailPage() {
   const isOwnProfile = user?.employee_id === Number(employeeId) || user?.employee?.id === Number(employeeId);
   const showSensitive = isAdminOrHR || isOwnProfile;
 
-  // Salary calculations
-  const grossSalary = (employee.basic_salary || 0) + (employee.hra || 0) + (employee.allowances || 0) + (employee.bonus || 0);
-  const totalDeductions = (employee.pf_deduction || 0) + (employee.esi_employee || 0) + (employee.pt_amount || 0) + (employee.tds_amount || 0) + (employee.other_deductions || 0);
-  const netSalary = grossSalary - totalDeductions;
-  const annualCTC = (employee.ctc || 0) || (netSalary * 12) + (employee.esi_employer || 0) * 12;
+  // Salary calculations (parse strings to numbers to avoid JS type coercion issues)
+  const basic = Number(employee.basic_salary) || 0;
+  const hra = Number(employee.hra) || 0;
+  
+  // Handled whether allowances is returned as sum or JSON list
+  const allowances = Array.isArray(employee.allowances)
+    ? employee.allowances.reduce((acc: number, item: any) => acc + (Number(item.amount) || 0), 0)
+    : (Number(employee.allowances) || 0);
+    
+  const bonus = Number(employee.bonus) || 0;
+  const grossSalary = basic + hra + allowances + bonus;
+
+  const pf = Number(employee.pf_deduction) || 0;
+  const esi = Number(employee.esi_employee) || 0;
+  const pt = Number(employee.pt_amount) || 0;
+  const tds = Number(employee.tds_amount) || 0;
+  const other = Number(employee.other_deductions) || 0;
+
+  const totalDeductions = pf + esi + pt + tds + other;
+  const netSalary = Math.max(0, grossSalary - totalDeductions);
+  const annualCTC = Number(employee.ctc) || (netSalary * 12) + (Number(employee.esi_employer) || 0) * 12;
 
   const ptStateInfo = employee.pt_state ? PT_STATES.find(s => s.value === employee.pt_state) : null;
 
@@ -183,7 +183,7 @@ export default function EmployeeDetailPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800">{employee.full_name}</h2>
               <p className="text-sm text-slate-400">
-                {employee.employee_code} • {desigData?.title || employee.designation?.title || 'No Designation'} • {empTypeLabels[employee.employment_type]} •{' '}
+                {employee.employee_code} • {employee.designation?.title || 'No Designation'} • {empTypeLabels[employee.employment_type]} •{' '}
                 <Badge variant="outline" className={statusColors[employee.status]}>{employee.status}</Badge>
               </p>
             </div>
@@ -228,23 +228,45 @@ export default function EmployeeDetailPage() {
 
           {/* Identity Documents */}
           {showSensitive && (
-            <SectionCard title="Identity Documents" icon={FileBadge}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <DetailRow label="PAN" value={employee.pan_number?.toUpperCase()} copyable />
-                <DetailRow label="Aadhaar" value={employee.aadhaar_number ? employee.aadhaar_number.replace(/(\d{4})/g, '$1 ').trim() : null} copyable />
-                <DetailRow label="Driving License" value={employee.driving_license} copyable />
-                <DetailRow label="Passport" value={employee.passport_number} copyable />
-                <DetailRow label="Voter ID" value={employee.voter_id} copyable />
-                <DetailRow label="UAN (EPF)" value={employee.uan_number} copyable />
-              </div>
+            <SectionCard 
+              title="Identity Documents" 
+              icon={FileBadge}
+              action={
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setRevealDocs(!revealDocs)}
+                  className="h-8 text-xs font-semibold text-blue-600 hover:text-blue-500 hover:bg-blue-50/50 gap-1.5"
+                >
+                  {revealDocs ? <EyeOff size={13} /> : <Eye size={13} />}
+                  {revealDocs ? 'Hide' : 'View'}
+                </Button>
+              }
+            >
+              {revealDocs ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <DetailRow label="PAN" value={employee.pan_number?.toUpperCase()} copyable />
+                  <DetailRow label="Aadhaar" value={employee.aadhaar_number ? employee.aadhaar_number.replace(/(\d{4})/g, '$1 ').trim() : null} copyable />
+                  <DetailRow label="Driving License" value={employee.driving_license} copyable />
+                  <DetailRow label="Passport" value={employee.passport_number} copyable />
+                  <DetailRow label="Voter ID" value={employee.voter_id} copyable />
+                  <DetailRow label="UAN (EPF)" value={employee.uan_number} copyable />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-100">
+                  <Lock size={20} className="text-slate-400 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">Identity Documents Hidden</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Click the "View" button in the card header to reveal.</p>
+                </div>
+              )}
             </SectionCard>
           )}
 
           {/* Employment Details */}
           <SectionCard title="Employment Details" icon={Briefcase}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <DetailRow label="Department" value={deptData?.name || '—'} />
-              <DetailRow label="Designation" value={desigData?.title || '—'} />
+              <DetailRow label="Department" value={employee.department?.name || '—'} />
+              <DetailRow label="Designation" value={employee.designation?.title || '—'} />
               <DetailRow label="Reporting To" value={employee.manager?.full_name || '—'} />
               <DetailRow label="Employee Code" value={employee.employee_code} copyable />
               <DetailRow label="Joining Date" value={formatDate(employee.joining_date)} />
@@ -267,13 +289,35 @@ export default function EmployeeDetailPage() {
 
           {/* Bank Details */}
           {showSensitive && (
-            <SectionCard title="Bank Details" icon={CreditCard}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <DetailRow label="Bank Name" value={employee.bank_name} />
-                <DetailRow label="Account Number" value={employee.bank_account_number} copyable />
-                <DetailRow label="IFSC Code" value={employee.bank_ifsc?.toUpperCase()} copyable />
-                <DetailRow label="Branch" value={employee.bank_branch} />
-              </div>
+            <SectionCard 
+              title="Bank Details" 
+              icon={CreditCard}
+              action={
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setRevealBank(!revealBank)}
+                  className="h-8 text-xs font-semibold text-blue-600 hover:text-blue-500 hover:bg-blue-50/50 gap-1.5"
+                >
+                  {revealBank ? <EyeOff size={13} /> : <Eye size={13} />}
+                  {revealBank ? 'Hide' : 'View'}
+                </Button>
+              }
+            >
+              {revealBank ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <DetailRow label="Bank Name" value={employee.bank_name} />
+                  <DetailRow label="Account Number" value={employee.bank_account_number} copyable />
+                  <DetailRow label="IFSC Code" value={employee.bank_ifsc?.toUpperCase()} copyable />
+                  <DetailRow label="Branch" value={employee.bank_branch} />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-100">
+                  <Lock size={20} className="text-slate-400 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">Bank Details Hidden</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Click the "View" button in the card header to reveal.</p>
+                </div>
+              )}
             </SectionCard>
           )}
         </div>
@@ -281,72 +325,87 @@ export default function EmployeeDetailPage() {
         {/* Right Column - Salary Breakdown */}
         <div className="space-y-6">
           {showSensitive && (
-            <SectionCard title="Salary Structure" icon={Banknote}>
-              <div className="space-y-4">
-                {/* Earnings */}
-                <div>
-                  <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Earnings (Monthly)</h4>
-                  <div className="space-y-1.5">
-                    <DetailRow label="Basic Salary" value={formatCurrency(employee.basic_salary)} />
-                    <DetailRow label="HRA" value={formatCurrency(employee.hra)} />
-                    <DetailRow label="Allowances" value={formatCurrency(employee.allowances)} />
-                    <DetailRow label="Bonus" value={formatCurrency(employee.bonus)} />
-                    <div className="border-t border-slate-100 pt-2 mt-2">
-                      <DetailRow label="Gross Salary" value={<span className="font-semibold text-slate-700">{formatCurrency(grossSalary)}</span>} />
+            <SectionCard 
+              title="Salary Structure" 
+              icon={Banknote}
+              action={
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setRevealSalary(!revealSalary)}
+                  className="h-8 text-xs font-semibold text-blue-600 hover:text-blue-500 hover:bg-blue-50/50 gap-1.5"
+                >
+                  {revealSalary ? <EyeOff size={13} /> : <Eye size={13} />}
+                  {revealSalary ? 'Hide' : 'View'}
+                </Button>
+              }
+            >
+              {revealSalary ? (
+                <div className="space-y-4">
+                  {/* Earnings */}
+                  <div>
+                    <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Earnings (Monthly)</h4>
+                    <div className="space-y-1.5">
+                      <DetailRow label="Basic Salary" value={formatCurrency(employee.basic_salary)} />
+                      <DetailRow label="HRA" value={formatCurrency(employee.hra)} />
+                      <DetailRow label="Allowances" value={formatCurrency(employee.allowances)} />
+                      <DetailRow label="Bonus" value={formatCurrency(employee.bonus)} />
+                      <div className="border-t border-slate-100 pt-2 mt-2">
+                        <DetailRow label="Gross Salary" value={<span className="font-semibold text-slate-700">{formatCurrency(grossSalary)}</span>} />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Deductions */}
-                <div>
-                  <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Deductions (Monthly)</h4>
-                  <div className="space-y-1.5">
-                    <DetailRow 
-                      label={`PF (${employee.pf_percentage || 0}%)`} 
-                      value={formatCurrency(employee.pf_deduction)} 
-                    />
-                    <DetailRow label="ESI (Employee)" value={formatCurrency(employee.esi_employee)} />
-                    <DetailRow 
-                      label={`PT ${employee.pt_state ? `(${employee.pt_state})` : ''}`} 
-                      value={
-                        <span className={ptStateInfo?.hasPT === false ? 'text-red-500' : ''}>
-                          {formatCurrency(employee.pt_amount)}
-                          {ptStateInfo?.hasPT === false && <span className="text-xs ml-1">(N/A)</span>}
-                        </span>
-                      } 
-                    />
-                    <DetailRow label="TDS" value={formatCurrency(employee.tds_amount)} />
-                    <DetailRow label="Other" value={formatCurrency(employee.other_deductions)} />
-                    <div className="border-t border-slate-100 pt-2 mt-2">
-                      <DetailRow label="Total Deductions" value={<span className="font-semibold text-red-600">- {formatCurrency(totalDeductions)}</span>} />
+                  {/* Deductions */}
+                  <div>
+                    <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Deductions (Monthly)</h4>
+                    <div className="space-y-1.5">
+                      <DetailRow 
+                        label={`PF (${employee.pf_percentage || 0}%)`} 
+                        value={formatCurrency(employee.pf_deduction)} 
+                      />
+                      <DetailRow label="ESI (Employee)" value={formatCurrency(employee.esi_employee)} />
+                      <DetailRow 
+                        label={`PT ${employee.pt_state ? `(${employee.pt_state})` : ''}`} 
+                        value={
+                          <span className={ptStateInfo?.hasPT === false ? 'text-red-500' : ''}>
+                            {formatCurrency(employee.pt_amount)}
+                            {ptStateInfo?.hasPT === false && <span className="text-xs ml-1">(N/A)</span>}
+                          </span>
+                        } 
+                      />
+                      <DetailRow label="TDS" value={formatCurrency(employee.tds_amount)} />
+                      <DetailRow label="Other" value={formatCurrency(employee.other_deductions)} />
+                      <div className="border-t border-slate-100 pt-2 mt-2">
+                        <DetailRow label="Total Deductions" value={<span className="font-semibold text-red-600">- {formatCurrency(totalDeductions)}</span>} />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Summary */}
-                <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Net Salary</span>
-                    <span className="text-lg font-bold text-slate-800">{formatCurrency(netSalary)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400">Annual CTC</span>
-                    <span className="font-medium text-slate-600">{formatCurrency(annualCTC)}</span>
-                  </div>
-                  {employee.esi_employer > 0 && (
-                    <div className="text-xs text-slate-400 pt-1 border-t border-slate-200">
-                      Employer ESI: {formatCurrency(employee.esi_employer)}/month
+                  {/* Summary */}
+                  <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-500">Net Salary</span>
+                      <span className="text-lg font-bold text-slate-800">{formatCurrency(netSalary)}</span>
                     </div>
-                  )}
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-400">Annual CTC</span>
+                      <span className="font-medium text-slate-600">{formatCurrency(annualCTC)}</span>
+                    </div>
+                    {employee.esi_employer > 0 && (
+                      <div className="text-xs text-slate-400 pt-1 border-t border-slate-200">
+                        Employer ESI: {formatCurrency(employee.esi_employer)}/month
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                {/* Quick Actions */}
-                <div className="pt-2 border-t border-slate-100">
-                  <Button variant="outline" size="sm" className="w-full justify-center gap-2 h-9">
-                    <FileText size={14} /> Generate Payslip
-                  </Button>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-100">
+                  <Lock size={20} className="text-slate-400 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">Salary Structure Hidden</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Click the "View" button in the card header to reveal.</p>
                 </div>
-              </div>
+              )}
             </SectionCard>
           )}
 
@@ -374,9 +433,9 @@ export default function EmployeeDetailPage() {
           {showSensitive && (
             <SectionCard title="Roles" icon={Briefcase}>
               <div className="space-y-1.5">
-                <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                <div className={`flex justify-between items-center py-2 ${employee.previous_designation ? 'border-b border-slate-50' : ''}`}>
                   <span className="text-sm text-slate-400">Current Role</span>
-                  <span className="text-sm font-medium text-slate-700">{desigData?.title || employee.designation?.title || '—'}</span>
+                  <span className="text-sm font-medium text-slate-700">{employee.designation?.title || '—'}</span>
                 </div>
                 {employee.previous_designation && (
                   <div className="flex justify-between items-center py-2 last:border-0">

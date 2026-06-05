@@ -28,6 +28,8 @@ import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { offboardingService, OffboardingRequest } from '@/services/offboardingService';
+import { useDepartments } from '@/hooks/useDepartments';
+import { useDesignations } from '@/hooks/useDesignations';
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -136,6 +138,13 @@ const assetTypes = [
 
 export default function OnboardingPage() {
   const { user } = useAuthStore();
+  
+  // Load departments & designations for dropdown selects
+  const { data: departmentsResponse } = useDepartments({ per_page: 500 });
+  const departments = Array.isArray(departmentsResponse?.data) ? departmentsResponse.data : [];
+
+  const { data: designationsResponse } = useDesignations({ per_page: 500 });
+  const designations = Array.isArray(designationsResponse?.data) ? designationsResponse.data : [];
   const [activeMainTab, setActiveMainTab] = useState<'onboarding' | 'offboarding'>('onboarding');
   
   // Onboarding States
@@ -150,6 +159,11 @@ export default function OnboardingPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedDocumentType, setSelectedDocumentType] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [generatingLetter, setGeneratingLetter] = useState(false);
+  const [sendingLetterId, setSendingLetterId] = useState<number | null>(null);
+  const [downloadingLetterId, setDownloadingLetterId] = useState<number | null>(null);
+  const [letterDate, setLetterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [letterContent, setLetterContent] = useState('');
   const [formData, setFormData] = useState({
     candidate_name: '',
     email: '',
@@ -208,7 +222,7 @@ export default function OnboardingPage() {
       const assetsRes = results[1];
       
       setOnboardingRequests(onboardingRes.data?.data?.data || onboardingRes.data?.data || []);
-      setAssets(assetsRes.data?.data || []);
+      setAssets(assetsRes.data?.data?.data || assetsRes.data?.data || []);
 
       if (isAdmin) {
         const offboardingRes = results[2];
@@ -494,6 +508,80 @@ export default function OnboardingPage() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       toast.error('Failed to download document');
+    }
+  };
+
+  // Generate offer letter
+  const handleGenerateOfferLetter = async () => {
+    if (!selectedRequest) return;
+    setGeneratingLetter(true);
+    try {
+      await api.post(`/onboarding/${selectedRequest.id}/offer-letter`, {
+        letter_date: letterDate,
+        content: letterContent,
+      });
+      toast.success('Offer letter generated successfully!');
+      
+      // Fetch fresh request data and update details modal
+      const res = await api.get(`/onboarding/${selectedRequest.id}`);
+      if (res.data?.success && res.data?.data) {
+        setSelectedRequest(res.data.data);
+      }
+      
+      fetchData();
+      setLetterContent('');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to generate offer letter');
+    } finally {
+      setGeneratingLetter(false);
+    }
+  };
+
+  // Download offer letter
+  const downloadOfferLetter = async (letterId: number, fileName: string) => {
+    try {
+      setDownloadingLetterId(letterId);
+      const response = await api.get(`/onboarding/offer-letters/${letterId}/download`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error('Failed to download offer letter');
+    } finally {
+      setDownloadingLetterId(null);
+    }
+  };
+
+  // Send offer letter
+  const handleSendOfferLetter = async (letterId: number) => {
+    try {
+      setSendingLetterId(letterId);
+      await api.post(`/onboarding/offer-letters/${letterId}/send`);
+      toast.success('Offer letter sent successfully via email!');
+      
+      // Update local selectedRequest offer letter status to 'sent'
+      if (selectedRequest) {
+        const updatedLetters = selectedRequest.offer_letters.map(letter => {
+          if (letter.id === letterId) {
+            return { ...letter, status: 'sent' as const };
+          }
+          return letter;
+        });
+        setSelectedRequest({ ...selectedRequest, offer_letters: updatedLetters });
+      }
+      
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to send offer letter');
+    } finally {
+      setSendingLetterId(null);
     }
   };
 
@@ -1038,32 +1126,106 @@ export default function OnboardingPage() {
                   selectedRequest.offer_letters.map((letter) => (
                     <div key={letter.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
                       <div>
-                        <p className="font-semibold text-slate-800 text-sm">Offer Document - {letter.letter_number}</p>
-                        <p className="text-xs text-slate-400">Generated: {new Date(letter.letter_date).toLocaleDateString()}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-slate-800 text-sm">Offer Document - {letter.letter_number}</p>
+                          <Badge className={`rounded-lg capitalize text-[10px] px-1.5 py-0.5 font-normal tracking-wide ${
+                            letter.status === 'sent' 
+                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                              : letter.status === 'accepted'
+                                ? 'bg-green-50 text-green-700 border border-green-100'
+                                : 'bg-gray-50 text-gray-500 border border-gray-200'
+                          }`}>
+                            {letter.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">Generated: {new Date(letter.letter_date).toLocaleDateString('en-IN')}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => downloadDocument(letter.id, `offer_letter_${selectedRequest.candidate_name}.pdf`)}
-                          className="p-2 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition shadow-sm border border-slate-200"
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => downloadOfferLetter(letter.id, `offer_letter_${selectedRequest.candidate_name}.pdf`)}
+                          disabled={downloadingLetterId === letter.id}
+                          className="h-8 w-8 p-0 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition shadow-sm border border-slate-200"
                         >
-                          <Download size={14} />
-                        </button>
+                          {downloadingLetterId === letter.id ? (
+                            <Loader2 size={14} className="animate-spin text-slate-500" />
+                          ) : (
+                            <Download size={14} />
+                          )}
+                        </Button>
                         {isAdmin && letter.status === 'draft' && (
-                          <Button size="sm" onClick={() => api.post(`/onboarding/offer-letters/${letter.id}/send`)} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl">
-                            <Send size={12} className="mr-1" /> Send Offer
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleSendOfferLetter(letter.id)}
+                            disabled={sendingLetterId === letter.id}
+                            className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl h-8"
+                          >
+                            {sendingLetterId === letter.id ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin mr-1" />
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <Send size={12} className="mr-1" /> Send Offer
+                              </>
+                            )}
                           </Button>
                         )}
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8">
-                    <FileText size={48} className="mx-auto text-slate-200 mb-3" />
-                    <p className="text-slate-400 text-sm">No offer letter generated yet</p>
+                  <div className="space-y-4 py-2">
+                    <div className="text-center py-5 border border-dashed border-slate-100 rounded-2xl bg-slate-50/50 p-4">
+                      <FileText size={40} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-slate-500 text-xs font-semibold">No offer letter generated yet</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Generate the official letter for this candidate below.</p>
+                    </div>
+
                     {isAdmin && (
-                      <Button className="mt-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl" onClick={() => toast.info('Generators are triggered when candidates are approved')}>
-                        Check Approval State
-                      </Button>
+                      <div className="border border-slate-100 rounded-2xl p-4 bg-white space-y-3 shadow-sm">
+                        <p className="font-bold text-xs text-slate-700 uppercase tracking-wider">Generate Offer/Joining Letter</p>
+                        
+                        <div className="grid grid-cols-1 gap-3 text-sm">
+                          <div>
+                            <Label className="text-slate-600 text-xs font-medium">Letter Date *</Label>
+                            <Input
+                              type="date"
+                              value={letterDate}
+                              onChange={(e) => setLetterDate(e.target.value)}
+                              className="rounded-xl border-slate-200 h-9 mt-1 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-slate-600 text-xs font-medium">Special Terms / Content (Optional)</Label>
+                            <textarea
+                              value={letterContent}
+                              onChange={(e) => setLetterContent(e.target.value)}
+                              placeholder="Add any special conditions, CTC details, or custom messages..."
+                              className="w-full min-h-[80px] text-xs rounded-xl border border-slate-200 mt-1 p-2.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+
+                        <Button 
+                          onClick={handleGenerateOfferLetter} 
+                          disabled={generatingLetter}
+                          className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs h-9"
+                        >
+                          {generatingLetter ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                              Generating PDF...
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={14} className="mr-1" /> Generate Offer Letter
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1359,21 +1521,33 @@ export default function OnboardingPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-slate-600">Position *</Label>
-                <Input
+                <select
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="Job title"
-                  className="rounded-xl border-slate-200 h-10 mt-1"
-                />
+                  className="w-full rounded-xl border border-slate-200 h-10 mt-1 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select position</option>
+                  {designations.map((desig: any) => (
+                    <option key={desig.id} value={desig.title}>
+                      {desig.title}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <Label className="text-slate-600">Department *</Label>
-                <Input
+                <select
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  placeholder="Department name"
-                  className="rounded-xl border-slate-200 h-10 mt-1"
-                />
+                  className="w-full rounded-xl border border-slate-200 h-10 mt-1 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select department</option>
+                  {departments.map((dept: any) => (
+                    <option key={dept.id} value={dept.name}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
