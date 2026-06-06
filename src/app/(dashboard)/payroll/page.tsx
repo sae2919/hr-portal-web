@@ -14,7 +14,7 @@ import {
   IndianRupee, CheckCircle2, Clock, Mail, Loader2, Send,
   Check, X, FileText, Plus, ChevronDown, ChevronUp,
   TrendingUp, Printer, BarChart3, CreditCard, Square,
-  CheckSquare, MinusSquare, Filter, Calendar, Users,
+  CheckSquare, MinusSquare, Filter, Calendar, Users, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -32,6 +32,14 @@ interface Employee {
   pan_number?: string;
   department?: { id: number; name: string; };
   designation?: { title: string; name?: string; };
+  employment_type?: string;
+  basic_salary?: number;
+  hra?: number;
+  allowances?: any;
+  bonus?: number;
+  pt_state?: string;
+  pt_amount?: number;
+  status?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -74,6 +82,50 @@ function amountInWords(net: number): string {
   return w;
 }
 
+const PT_SLABS: Record<string, { upTo: number; pt: number }[]> = {
+  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
+  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: 25000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Maharashtra':       [{ upTo: 7500,  pt: 0 }, { upTo: 10000, pt: 175 }, { upTo: Infinity, pt: 200 }],
+  'Tamil Nadu':        [{ upTo: 21000, pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'West Bengal':       [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 110 }, { upTo: 25000, pt: 130 }, { upTo: 40000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Gujarat':           [{ upTo: 5999,  pt: 0 }, { upTo: 8999, pt: 80 }, { upTo: 11999, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Madhya Pradesh':    [{ upTo: 18750, pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
+  'Kerala':            [{ upTo: 11999, pt: 0 }, { upTo: 17999, pt: 120 }, { upTo: 29999, pt: 180 }, { upTo: Infinity, pt: 208 }],
+  'Assam':             [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 150 }, { upTo: 25000, pt: 180 }, { upTo: Infinity, pt: 208 }],
+  'Bihar':             [{ upTo: 25000, pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Jharkhand':         [{ upTo: 25000, pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Odisha':            [{ upTo: 13304, pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Punjab':            [{ upTo: Infinity, pt: 200 }],
+  'Sikkim':            [{ upTo: 20000, pt: 0 }, { upTo: 30000, pt: 125 }, { upTo: 40000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Meghalaya':         [{ upTo: 4166, pt: 0 }, { upTo: 6250, pt: 16 }, { upTo: 8333, pt: 25 }, { upTo: 12500, pt: 41 }, { upTo: 16666, pt: 83 }, { upTo: 20833, pt: 166 }, { upTo: Infinity, pt: 208 }],
+  'Tripura':           [{ upTo: 7500,  pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Manipur':           [{ upTo: 5000,  pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Mizoram':           [{ upTo: 5000,  pt: 0 }, { upTo: Infinity, pt: 208 }],
+  'Nagaland':          [{ upTo: Infinity, pt: 208 }],
+  'Delhi':             [{ upTo: Infinity, pt: 0 }],
+  'Rajasthan':         [{ upTo: Infinity, pt: 0 }],
+  'Uttar Pradesh':     [{ upTo: Infinity, pt: 0 }],
+  'Haryana':           [{ upTo: Infinity, pt: 0 }],
+  'Himachal Pradesh':  [{ upTo: Infinity, pt: 0 }],
+  'Uttarakhand':       [{ upTo: Infinity, pt: 0 }],
+  'Jammu & Kashmir':   [{ upTo: Infinity, pt: 0 }],
+  'Chhattisgarh':      [{ upTo: Infinity, pt: 0 }],
+  'Goa':               [{ upTo: Infinity, pt: 0 }],
+  'Arunachal Pradesh': [{ upTo: Infinity, pt: 0 }],
+};
+
+const PT_STATES = Object.keys(PT_SLABS).sort();
+
+function calculatePT(state: string, gross: number): number {
+  const slabs = PT_SLABS[state];
+  if (!slabs) return 0;
+  for (const slab of slabs) {
+    if (gross <= slab.upTo) return slab.pt;
+  }
+  return 0;
+}
+
 // ─── Payslip Print Modal ──────────────────────────────────────────────────────
 function PayslipModal({ payroll, items, companyName, onClose }: {
   payroll: Payroll; items: PayrollItem[]; companyName: string; onClose: () => void;
@@ -85,6 +137,81 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
   const printDate = new Date().toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+
+  // Master structure rates from relationship
+  const structure = (payroll as any).salary_structure;
+  const masterBasic = structure?.basic_salary ?? 0;
+  const masterHra = structure?.hra ?? 0;
+  const masterAllowances = structure?.allowances ?? 0;
+  const masterBonus = structure?.bonus ?? 0;
+  const masterGross = structure?.gross_salary ?? 0;
+
+  // Actual earnings details
+  const actualBasic = earnings.find(i => i.name === 'Stipend')?.amount
+    || earnings.find(i => i.name === 'Basic Salary')?.amount
+    || earnings.find(i => i.name.toLowerCase().includes('basic'))?.amount
+    || payroll.basic_salary || '0';
+
+  const actualHra = earnings.find(i => i.name === 'HRA')?.amount
+    || earnings.find(i => i.name.toLowerCase().includes('hra'))?.amount
+    || '0';
+
+  const actualAllowances = earnings.find(i => i.name === 'Allowances')?.amount
+    || earnings.find(i => i.name.toLowerCase().includes('allowance'))?.amount
+    || '0';
+
+  const actualBonus = earnings.find(i => i.name === 'Bonus')?.amount
+    || earnings.find(i => i.name.toLowerCase().includes('bonus'))?.amount
+    || '0';
+
+  const isIntern = (payroll.employee as any)?.employment_type === 'intern';
+
+  // Earning rows
+  const leftRows: Array<{ label: string; master: number | null; actual: number | null }> = isIntern ? [
+    { label: 'Stipend', master: Number(masterBasic), actual: Number(actualBasic) },
+  ] : [
+    { label: 'Basic Salary', master: Number(masterBasic), actual: Number(actualBasic) },
+    { label: 'HRA', master: Number(masterHra), actual: Number(actualHra) },
+    { label: 'Special Allowance', master: Number(masterAllowances), actual: Number(actualAllowances) },
+  ];
+
+  if (!isIntern && (Number(masterBonus) > 0 || Number(actualBonus) > 0)) {
+    leftRows.push({ label: 'Bonus', master: Number(masterBonus), actual: Number(actualBonus) });
+  }
+
+  // Dynamic earnings
+  const knownEarningNames = ['basic salary', 'basic', 'hra', 'allowances', 'special allowance', 'bonus', 'stipend'];
+  earnings.forEach(item => {
+    const lowerName = item.name.toLowerCase();
+    if (!knownEarningNames.some(kn => lowerName.includes(kn))) {
+      leftRows.push({ label: item.name, master: 0, actual: Number(item.amount) });
+    }
+  });
+
+  // Deduction rows
+  const rightRows: Array<{ label: string; actual: number | null }> = [];
+  if (!isIntern) {
+    deductions.forEach(item => {
+      let label = item.name;
+      if (label.toLowerCase().includes('prof') || label.toLowerCase().includes('professional')) {
+        label = 'Prof Tax';
+      }
+      rightRows.push({ label, actual: Number(item.amount) });
+    });
+
+    if (rightRows.length === 0) {
+      rightRows.push({ label: 'Prof Tax', actual: 0 });
+    }
+  }
+
+  // Row balancing
+  const maxRows = Math.max(leftRows.length, rightRows.length);
+  while (leftRows.length < maxRows) {
+    leftRows.push({ label: '', master: null, actual: null });
+  }
+  while (rightRows.length < maxRows) {
+    rightRows.push({ label: '', actual: null });
+  }
 
   function handlePrint() {
     const el = document.getElementById('payslip-print-area');
@@ -172,7 +299,7 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
                 ['Bank Name:', payroll.employee.bank_name ?? '—'],
                 ['Bank Account No:', payroll.employee.bank_account_number ?? '—'],
                 ['PAN Number:', payroll.employee.pan_number ?? '—'],
-                ['Effective Work Days:', String(payroll.working_days)],
+                ['Effective Work Days:', String(payroll.present_days)],
                 ['LOP:', String(payroll.lop_days)],
               ].map(([l, v]) => (
                 <div key={l} className="info-row flex gap-2">
@@ -193,22 +320,22 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: Math.max(earnings.length, deductions.length) }).map((_, i) => {
-                const earn = earnings[i];
-                const ded  = deductions[i];
+              {Array.from({ length: maxRows }).map((_, i) => {
+                const earn = leftRows[i];
+                const ded  = rightRows[i];
                 return (
                   <tr key={i}>
-                    <td className="border border-gray-300 px-2 py-1">{earn?.name ?? ''}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{earn ? fmt(earn.amount) : ''}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{earn ? fmt(earn.amount) : ''}</td>
-                    <td className="border border-gray-300 px-2 py-1">{ded?.name ?? ''}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{ded ? fmt(ded.amount) : ''}</td>
+                    <td className="border border-gray-300 px-2 py-1">{earn?.label ?? ''}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-right">{earn?.master !== null ? fmt(earn.master) : ''}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-right">{earn?.actual !== null ? fmt(earn.actual) : ''}</td>
+                    <td className="border border-gray-300 px-2 py-1">{ded?.label ?? ''}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-right">{ded?.actual !== null ? fmt(ded.actual) : ''}</td>
                   </tr>
                 );
               })}
               <tr className="font-bold bg-gray-50">
                 <td className="border border-gray-400 px-2 py-1">Total Earnings: INR.</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.gross_salary)}</td>
+                <td className="border border-gray-400 px-2 py-1 text-right">{fmt(masterGross)}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.gross_salary)}</td>
                 <td className="border border-gray-400 px-2 py-1">Total Deductions: INR.</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.total_deductions)}</td>
@@ -233,15 +360,17 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
 }
 
 // ─── Expanded Payroll Row ─────────────────────────────────────────────────────
-function ExpandedRow({ payroll, isAdmin, emailingId,
-  selected, onSelect, onMarkPaid, onEmail, onViewPayslip,
+function ExpandedRow({ payroll, isAdmin, emailingId, deletingId,
+  selected, onSelect, onMarkPaid, onEmail, onViewPayslip, onDelete,
 }: {
   payroll: Payroll; isAdmin: boolean;
   emailingId: number | null;
+  deletingId: number | null;
   selected: boolean; onSelect: (id: number, checked: boolean) => void;
   onMarkPaid: (id: number) => void;
   onEmail: (id: number) => void;
   onViewPayslip: (payroll: Payroll) => void;
+  onDelete: (id: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const gross = Number(payroll.gross_salary);
@@ -286,6 +415,12 @@ function ExpandedRow({ payroll, isAdmin, emailingId,
         <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-2">
             {isAdmin && payroll.status !== 'paid' && (
+              <button onClick={() => onDelete(payroll.id)} disabled={deletingId === payroll.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 hover:bg-red-500 text-white transition disabled:opacity-60 shadow-sm">
+                {deletingId === payroll.id ? <Loader2 size={12} className="animate-spin" /> : <><Trash2 size={12} /> Delete</>}
+              </button>
+            )}
+            {isAdmin && payroll.status !== 'paid' && (
               <button onClick={() => onMarkPaid(payroll.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm">
                 <CreditCard size={12} /> Mark Paid
               </button>
@@ -306,32 +441,57 @@ function ExpandedRow({ payroll, isAdmin, emailingId,
           </div>
         </td>
       </tr>
-      {expanded && (
-        <tr className="bg-slate-50/40">
-          <td colSpan={isAdmin ? 8 : 6} className="px-6 py-4">
-            <div className="grid grid-cols-4 gap-4 text-xs">
-              {[
-                { label: 'Basic Salary', value: `₹${fmt(basic)}`, color: 'text-slate-700' },
-                { label: 'Gross Salary', value: `₹${fmt(gross)}`, color: 'text-slate-700' },
-                { label: 'Total Deductions', value: `₹${fmt(ded)}`, color: 'text-red-500' },
-                { label: 'Net Salary', value: `₹${fmt(net)}`, color: 'text-green-600' },
-                { label: 'Working Days', value: String(payroll.working_days), color: 'text-slate-700' },
-                { label: 'Present Days', value: String(payroll.present_days), color: 'text-slate-700' },
-                { label: 'LOP Days', value: String(payroll.lop_days), color: payroll.lop_days > 0 ? 'text-red-500' : 'text-slate-700' },
-                { label: 'LOP Deduction', value: `₹${fmt(payroll.lop_deduction)}`, color: 'text-red-400' },
-              ].map(item => (
-                <div key={item.label} className="bg-white rounded-xl border border-slate-100 px-3 py-2.5">
-                  <p className="text-slate-400 text-[10px] mb-0.5">{item.label}</p>
-                  <p className={`font-semibold ${item.color}`}>{item.value}</p>
-                </div>
-              ))}
-            </div>
-            {payroll.paid_at && (
-              <p className="text-[10px] text-slate-400 mt-3">Paid on: {new Date(payroll.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-            )}
-          </td>
-        </tr>
-      )}
+      {expanded && (() => {
+        const isIntern = (payroll.employee as any)?.employment_type === 'intern';
+        const workingDays = Number(payroll.working_days);
+        const lopDays = Number(payroll.lop_days);
+        const attendanceFactor = workingDays > 0 ? (workingDays - lopDays) / workingDays : 1;
+        const structure = (payroll as any).salary_structure;
+        const masterHra = structure?.hra ? Number(structure.hra) : 0;
+        const masterAllowances = structure?.allowances ? Number(structure.allowances) : 0;
+        
+        const proratedHra = masterHra * attendanceFactor;
+        const proratedAllowances = masterAllowances * attendanceFactor;
+
+        const detailItems = [
+          { label: isIntern ? 'Stipend' : 'Basic Salary', value: `₹${fmt(basic)}`, color: 'text-slate-700' },
+        ];
+
+        if (!isIntern) {
+          detailItems.push(
+            { label: 'HRA', value: `₹${fmt(proratedHra)}`, color: 'text-slate-700' },
+            { label: 'Special Allowance', value: `₹${fmt(proratedAllowances)}`, color: 'text-slate-700' }
+          );
+        }
+
+        detailItems.push(
+          { label: 'Gross Salary', value: `₹${fmt(gross)}`, color: 'text-slate-700 font-semibold' },
+          { label: 'Total Deductions', value: `₹${fmt(ded)}`, color: 'text-red-500' },
+          { label: 'Net Salary', value: `₹${fmt(net)}`, color: 'text-green-600 font-semibold' },
+          { label: 'Working Days', value: String(payroll.working_days), color: 'text-slate-700' },
+          { label: 'Present Days', value: String(payroll.present_days), color: 'text-slate-700' },
+          { label: 'LOP Days', value: String(payroll.lop_days), color: payroll.lop_days > 0 ? 'text-red-500' : 'text-slate-700' },
+          { label: 'LOP Deduction', value: `₹${fmt(payroll.lop_deduction)}`, color: 'text-red-400' }
+        );
+
+        return (
+          <tr className="bg-slate-50/40">
+            <td colSpan={isAdmin ? 8 : 6} className="px-6 py-4">
+              <div className={`grid gap-4 text-xs grid-cols-2 sm:grid-cols-4 ${isIntern ? '' : 'lg:grid-cols-5'}`}>
+                {detailItems.map(item => (
+                  <div key={item.label} className="bg-white rounded-xl border border-slate-100 px-3 py-2.5 shadow-sm">
+                    <p className="text-slate-400 text-[10px] mb-0.5">{item.label}</p>
+                    <p className={`font-semibold ${item.color}`}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+              {payroll.paid_at && (
+                <p className="text-[10px] text-slate-400 mt-3">Paid on: {new Date(payroll.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+              )}
+            </td>
+          </tr>
+        );
+      })()}
     </>
   );
 }
@@ -548,6 +708,7 @@ export default function PayrollPage() {
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<PayrollPaginationMeta | null>(null);
   const [emailingId, setEmailingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -575,11 +736,115 @@ export default function PayrollPage() {
   const [showGenModal, setShowGenModal] = useState(false);
   const [loadingEmps, setLoadingEmps] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; employeeName: string } | null>(null);
   const [globalPfPct, setGlobalPfPct] = useState(0);
   const [genForm, setGenForm] = useState<GeneratePayrollPayload>({
     employee_id: 0, month: new Date().getMonth() + 1, year: CURRENT_YEAR,
     include_pf: true, include_pt: true, pf_percentage: 0, pt_amount: 0,
   });
+  const [selectedPtState, setSelectedPtState] = useState<string>('');
+
+  // Recalculate PT when selected employee changes
+  useEffect(() => {
+    if (!genForm.employee_id) {
+      setSelectedPtState('');
+      setGenForm(f => ({ ...f, pt_amount: 0 }));
+      return;
+    }
+
+    const selectedEmp = employees.find(e => e.id === genForm.employee_id);
+    if (selectedEmp) {
+      const defaultState = selectedEmp.pt_state || '';
+      setSelectedPtState(defaultState);
+
+      // calculate gross
+      const basic = Number(selectedEmp.basic_salary) || 0;
+      const hra = Number(selectedEmp.hra) || 0;
+      const bonus = Number(selectedEmp.bonus) || 0;
+      let allowancesVal = 0;
+      if (Array.isArray(selectedEmp.allowances)) {
+        allowancesVal = selectedEmp.allowances.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+      } else if (typeof selectedEmp.allowances === 'number') {
+        allowancesVal = selectedEmp.allowances;
+      } else if (typeof selectedEmp.allowances === 'string') {
+        try {
+          const parsed = JSON.parse(selectedEmp.allowances);
+          if (Array.isArray(parsed)) {
+            allowancesVal = parsed.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+          }
+        } catch {}
+      }
+      const gross = basic + hra + allowancesVal + bonus;
+
+      const calculatedPt = defaultState ? calculatePT(defaultState, gross) : 0;
+      setGenForm(f => ({ ...f, pt_amount: calculatedPt }));
+    }
+  }, [genForm.employee_id, employees]);
+
+  const handlePtStateChange = (state: string) => {
+    setSelectedPtState(state);
+    
+    if (!genForm.employee_id) {
+      setGenForm(f => ({ ...f, pt_amount: 0 }));
+      return;
+    }
+
+    const selectedEmp = employees.find(e => e.id === genForm.employee_id);
+    if (selectedEmp) {
+      const basic = Number(selectedEmp.basic_salary) || 0;
+      const hra = Number(selectedEmp.hra) || 0;
+      const bonus = Number(selectedEmp.bonus) || 0;
+      let allowancesVal = 0;
+      if (Array.isArray(selectedEmp.allowances)) {
+        allowancesVal = selectedEmp.allowances.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+      } else if (typeof selectedEmp.allowances === 'number') {
+        allowancesVal = selectedEmp.allowances;
+      } else if (typeof selectedEmp.allowances === 'string') {
+        try {
+          const parsed = JSON.parse(selectedEmp.allowances);
+          if (Array.isArray(parsed)) {
+            allowancesVal = parsed.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+          }
+        } catch {}
+      }
+      const gross = basic + hra + allowancesVal + bonus;
+
+      const calculatedPt = state ? calculatePT(state, gross) : 0;
+      setGenForm(f => ({ ...f, pt_amount: calculatedPt }));
+    }
+  };
+
+  const handleIncludePtToggle = () => {
+    setGenForm(f => {
+      const nextInclude = !f.include_pt;
+      let nextAmount = 0;
+      if (nextInclude && f.employee_id) {
+        const selectedEmp = employees.find(e => e.id === f.employee_id);
+        if (selectedEmp) {
+          const stateToUse = selectedPtState || selectedEmp.pt_state || '';
+          const basic = Number(selectedEmp.basic_salary) || 0;
+          const hra = Number(selectedEmp.hra) || 0;
+          const bonus = Number(selectedEmp.bonus) || 0;
+          let allowancesVal = 0;
+          if (Array.isArray(selectedEmp.allowances)) {
+            allowancesVal = selectedEmp.allowances.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+          } else if (typeof selectedEmp.allowances === 'number') {
+            allowancesVal = selectedEmp.allowances;
+          } else if (typeof selectedEmp.allowances === 'string') {
+            try {
+              const parsed = JSON.parse(selectedEmp.allowances);
+              if (Array.isArray(parsed)) {
+                allowancesVal = parsed.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+              }
+            } catch {}
+          }
+          const gross = basic + hra + allowancesVal + bonus;
+          nextAmount = stateToUse ? calculatePT(stateToUse, gross) : 0;
+        }
+      }
+      return { ...f, include_pt: nextInclude, pt_amount: nextAmount };
+    });
+  };
 
   const isAdmin = user?.role === 'admin';
 
@@ -717,6 +982,7 @@ export default function PayrollPage() {
       pf_percentage: globalPfPct,
       pt_amount: 0,
     }));
+    setSelectedPtState('');
   }
 
   async function handleGenerate() {
@@ -729,6 +995,77 @@ export default function PayrollPage() {
       toast.error('PF percentage must be 0–12%.');
       return;
     }
+
+    if (genForm.employee_id === 'all') {
+      const activeEmps = employees.filter(e => e.status === 'active' || !e.status || e.status === '');
+      if (activeEmps.length === 0) {
+        toast.error('No active employees found to generate payroll for.');
+        return;
+      }
+
+      setGenerating(true);
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < activeEmps.length; i++) {
+        const emp = activeEmps[i];
+        setBulkProgress({ current: i + 1, total: activeEmps.length, employeeName: `${emp.first_name} ${emp.last_name}` });
+
+        // Calculate gross salary
+        const basic = Number(emp.basic_salary) || 0;
+        const hra = Number(emp.hra) || 0;
+        const bonus = Number(emp.bonus) || 0;
+        let allowancesVal = 0;
+        if (Array.isArray(emp.allowances)) {
+          allowancesVal = emp.allowances.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+        } else if (typeof emp.allowances === 'number') {
+          allowancesVal = emp.allowances;
+        } else if (typeof emp.allowances === 'string') {
+          try {
+            const parsed = JSON.parse(emp.allowances);
+            if (Array.isArray(parsed)) {
+              allowancesVal = parsed.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+            }
+          } catch {}
+        }
+        const gross = basic + hra + allowancesVal + bonus;
+
+        // Calculate PT amount
+        const ptState = emp.pt_state || '';
+        const empPtAmount = (genForm.include_pt && ptState) ? calculatePT(ptState, gross) : 0;
+
+        const empPayload = {
+          employee_id: emp.id,
+          month: genForm.month,
+          year: genForm.year,
+          include_pf: genForm.include_pf,
+          include_pt: genForm.include_pt,
+          pf_percentage: genForm.pf_percentage,
+          pt_amount: empPtAmount,
+        };
+
+        try {
+          await api.post('/payrolls/generate', empPayload);
+          successCount++;
+        } catch (err: any) {
+          console.error(`Failed to generate payroll for ${emp.first_name}:`, err);
+          failCount++;
+        }
+      }
+
+      setGenerating(false);
+      setBulkProgress(null);
+      setShowGenModal(false);
+      loadData(1);
+
+      if (failCount === 0) {
+        toast.success(`Successfully generated payroll for all ${successCount} employees.`);
+      } else {
+        toast.warning(`Generated payroll: ${successCount} succeeded, ${failCount} failed.`);
+      }
+      return;
+    }
+
     setGenerating(true);
     try {
       await api.post('/payrolls/generate', genForm);
@@ -749,6 +1086,20 @@ export default function PayrollPage() {
       loadData(page);
     } catch (error) {
       toast.error('Failed to mark as paid');
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm('Are you sure you want to delete this payroll record?')) return;
+    setDeletingId(id);
+    try {
+      await api.delete(`/payrolls/${id}`);
+      toast.success('Payroll record deleted successfully.');
+      loadData(page);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to delete payroll record.');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -928,11 +1279,13 @@ export default function PayrollPage() {
                       payroll={p}
                       isAdmin={isAdmin}
                       emailingId={emailingId}
+                      deletingId={deletingId}
                       selected={selectedIds.includes(p.id)}
                       onSelect={handleSelectOne}
                       onMarkPaid={markPaid}
                       onEmail={sendEmail}
                       onViewPayslip={openPayslip}
+                      onDelete={handleDelete}
                     />
                   ))
                 )}
@@ -975,96 +1328,179 @@ export default function PayrollPage() {
               </button>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Employee</label>
-                <div className="relative">
-                  <select value={genForm.employee_id} onChange={e => setGenForm(f => ({ ...f, employee_id: Number(e.target.value) }))} disabled={loadingEmps} className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-9">
-                    <option value={0}>{loadingEmps ? 'Loading...' : 'Select employee'}</option>
-                    {employees.map(e => (
-                      <option key={e.id} value={e.id}>{e.first_name} {e.last_name}{e.department?.name ? ` – ${e.department.name}` : ''}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              {bulkProgress ? (
+                <div className="py-6 flex flex-col items-center justify-center space-y-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-slate-600" />
+                  <div className="text-center space-y-1">
+                    <h3 className="text-sm font-semibold text-slate-800">Generating Payroll Records...</h3>
+                    <p className="text-xs text-slate-400">Processing: <span className="font-medium text-slate-600">{bulkProgress.employeeName}</span></p>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 max-w-xs mt-2 relative overflow-hidden">
+                    <div 
+                      className="bg-slate-800 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }} 
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {bulkProgress.current} of {bulkProgress.total} employees completed
+                  </p>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Month', key: 'month' as const, options: MONTHS.map((m, i) => ({ label: m, value: i + 1 })) },
-                  { label: 'Year', key: 'year' as const, options: YEARS.map(y => ({ label: String(y), value: y })) },
-                ].map(({ label, key, options }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Employee</label>
                     <div className="relative">
-                      <select value={genForm[key]} onChange={e => setGenForm(f => ({ ...f, [key]: Number(e.target.value) }))} className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-9">
-                        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      <select value={genForm.employee_id} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          setGenForm(f => ({ ...f, employee_id: val === 'all' ? 'all' : Number(val) }));
+                        }} 
+                        disabled={loadingEmps} 
+                        className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-9">
+                        <option value={0}>{loadingEmps ? 'Loading...' : 'Select employee'}</option>
+                        <option value="all">All Active Employees</option>
+                        {employees.map(e => (
+                          <option key={e.id} value={e.id}>{e.first_name} {e.last_name}{e.department?.name ? ` – ${e.department.name}` : ''}</option>
+                        ))}
                       </select>
                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
-                ))}
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-600">Deduction Options</label>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">Provident Fund (PF)</p>
-                      <p className="text-xs text-slate-400">Percentage of basic salary</p>
-                    </div>
-                    <button type="button"
-                      onClick={() => setGenForm(f => ({ ...f, include_pf: !f.include_pf, pf_percentage: f.include_pf ? 0 : globalPfPct }))}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${genForm.include_pf ? 'bg-slate-800' : 'bg-slate-300'}`}>
-                      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${genForm.include_pf ? 'translate-x-5' : ''}`} />
-                    </button>
-                  </div>
-                  {genForm.include_pf && (
-                    <div className="px-4 pb-3 pt-3 border-t border-slate-200">
-                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">PF Rate (0–12%)</label>
-                      <div className="relative">
-                        <select value={genForm.pf_percentage ?? 0}
-                          onChange={e => setGenForm(f => ({ ...f, pf_percentage: Number(e.target.value) }))}
-                          className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-8">
-                          {Array.from({length:13},(_,i)=>i).map(v => <option key={v} value={v}>{v}%</option>)}
-                        </select>
-                        <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Month', key: 'month' as const, options: MONTHS.map((m, i) => ({ label: m, value: i + 1 })) },
+                      { label: 'Year', key: 'year' as const, options: YEARS.map(y => ({ label: String(y), value: y })) },
+                    ].map(({ label, key, options }) => (
+                      <div key={key}>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
+                        <div className="relative">
+                          <select value={genForm[key]} onChange={e => setGenForm(f => ({ ...f, [key]: Number(e.target.value) }))} className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-9">
+                            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">Professional Tax (PT)</p>
-                      <p className="text-xs text-slate-400">State-level fixed tax deduction</p>
-                    </div>
-                    <button type="button"
-                      onClick={() => setGenForm(f => ({ ...f, include_pt: !f.include_pt, pt_amount: 0 }))}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${genForm.include_pt ? 'bg-slate-800' : 'bg-slate-300'}`}>
-                      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${genForm.include_pt ? 'translate-x-5' : ''}`} />
-                    </button>
+                    ))}
                   </div>
-                  {genForm.include_pt && (
-                    <div className="px-4 pb-3 pt-3 border-t border-slate-200">
-                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">PT Amount</label>
-                      <div className="relative">
-                        <select value={genForm.pt_amount ?? 0}
-                          onChange={e => setGenForm(f => ({ ...f, pt_amount: Number(e.target.value) }))}
-                          className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-8">
-                          {[0,100,150,200,300,400,500].map(v => <option key={v} value={v}>₹{v}</option>)}
-                        </select>
-                        <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-600">Deduction Options</label>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">Provident Fund (PF)</p>
+                          <p className="text-xs text-slate-400">Percentage of basic salary</p>
+                        </div>
+                        <button type="button"
+                          onClick={() => setGenForm(f => ({ ...f, include_pf: !f.include_pf, pf_percentage: f.include_pf ? 0 : globalPfPct }))}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${genForm.include_pf ? 'bg-slate-800' : 'bg-slate-300'}`}>
+                          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${genForm.include_pf ? 'translate-x-5' : ''}`} />
+                        </button>
                       </div>
+                      {genForm.include_pf && (
+                        <div className="px-4 pb-3 pt-3 border-t border-slate-200">
+                          <label className="block text-xs font-semibold text-slate-500 mb-1.5">PF Rate (0–12%)</label>
+                          <div className="relative">
+                            <select value={genForm.pf_percentage ?? 0}
+                              onChange={e => setGenForm(f => ({ ...f, pf_percentage: Number(e.target.value) }))}
+                              className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-8">
+                              {Array.from({length:13},(_,i)=>i).map(v => <option key={v} value={v}>{v}%</option>)}
+                            </select>
+                            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">Professional Tax (PT)</p>
+                          <p className="text-xs text-slate-400">State-level fixed tax deduction</p>
+                        </div>
+                        <button type="button"
+                          onClick={handleIncludePtToggle}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${genForm.include_pt ? 'bg-slate-800' : 'bg-slate-300'}`}>
+                          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${genForm.include_pt ? 'translate-x-5' : ''}`} />
+                        </button>
+                      </div>
+                      {genForm.include_pt && (
+                        <div className="px-4 pb-3 pt-3 border-t border-slate-200 space-y-3">
+                          {genForm.employee_id === 'all' ? (
+                            <p className="text-xs text-slate-500 leading-normal flex items-start gap-1.5">
+                              <span className="text-slate-500">💡</span>
+                              <span>Professional Tax (PT) will be calculated automatically for each employee based on their configured state and gross salary.</span>
+                            </p>
+                          ) : (
+                            <>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">PT State</label>
+                                <div className="relative">
+                                  <select value={selectedPtState}
+                                    onChange={e => handlePtStateChange(e.target.value)}
+                                    className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-8">
+                                    <option value="">Select State</option>
+                                    {PT_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+                                  </select>
+                                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">PT Amount</label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    readOnly
+                                    value={genForm.pt_amount ?? 0}
+                                    className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-500 focus:outline-none cursor-not-allowed"
+                                    placeholder="₹0"
+                                  />
+                                </div>
+                                {Number(genForm.employee_id) > 0 && (() => {
+                                  const selectedEmp = employees.find(e => e.id === genForm.employee_id);
+                                  if (!selectedEmp) return null;
+                                  const basic = Number(selectedEmp.basic_salary) || 0;
+                                  const hra = Number(selectedEmp.hra) || 0;
+                                  const bonus = Number(selectedEmp.bonus) || 0;
+                                  let allowancesVal = 0;
+                                  if (Array.isArray(selectedEmp.allowances)) {
+                                    allowancesVal = selectedEmp.allowances.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+                                  } else if (typeof selectedEmp.allowances === 'number') {
+                                    allowancesVal = selectedEmp.allowances;
+                                  } else if (typeof selectedEmp.allowances === 'string') {
+                                    try {
+                                      const parsed = JSON.parse(selectedEmp.allowances);
+                                      if (Array.isArray(parsed)) {
+                                        allowancesVal = parsed.reduce((sum: number, a: any) => sum + (Number(a.amount) || 0), 0);
+                                      }
+                                    } catch {}
+                                  }
+                                  const gross = basic + hra + allowancesVal + bonus;
+                                  return (
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                      Employee Gross Salary: <span className="font-semibold text-slate-600">₹{gross.toLocaleString('en-IN')}</span>
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
-              <button onClick={() => setShowGenModal(false)} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition">Cancel</button>
-              <button onClick={handleGenerate} disabled={generating || !genForm.employee_id} className="flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition disabled:opacity-50 shadow-sm">
-                {generating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                {generating ? 'Generating...' : 'Generate'}
-              </button>
+              {!bulkProgress && (
+                <>
+                  <button onClick={() => setShowGenModal(false)} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition">Cancel</button>
+                  <button onClick={handleGenerate} disabled={generating || !genForm.employee_id} className="flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition disabled:opacity-50 shadow-sm">
+                    {generating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    {generating ? 'Generating...' : 'Generate'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

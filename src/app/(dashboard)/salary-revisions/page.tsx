@@ -40,6 +40,8 @@ export default function SalaryRevisionsPage() {
   // HRA percentage & Promotion designation states
   const [hraPercentage, setHraPercentage] = useState('');
   const [newDesignationId, setNewDesignationId] = useState('');
+  const [annualCTCInput, setAnnualCTCInput] = useState('');
+  const [isCtcFocused, setIsCtcFocused] = useState(false);
 
   // Load active employees for admin dropdown
   const { data: employees = [] } = useEmployees();
@@ -91,6 +93,7 @@ export default function SalaryRevisionsPage() {
 
   // Find selected employee to extract their current active salary
   const selectedEmployee = employees.find(e => e.id === Number(selectedEmpId));
+  const isIntern = selectedEmployee?.employment_type === 'intern';
   
   const currentBasic = selectedEmployee ? Number(selectedEmployee.basic_salary || 0) : 0;
   const currentHra = selectedEmployee ? Number(selectedEmployee.hra || 0) : 0;
@@ -127,16 +130,17 @@ export default function SalaryRevisionsPage() {
     const emp = employees.find(e => e.id === Number(empId));
     if (emp) {
       // Auto fill new fields with current values as a starting base
-      const basicVal = Number(emp.basic_salary || 0);
-      const hraVal = Number(emp.hra || 0);
+      const isEmpIntern = emp.employment_type === 'intern';
       setNewBasic(String(emp.basic_salary || ''));
-      setNewHra(String(emp.hra || ''));
-      setNewAllowances(String(emp.total_allowances || emp.allowances || ''));
-      setNewBonus(String(emp.bonus || ''));
+      setNewHra(isEmpIntern ? '0' : String(emp.hra || ''));
+      setNewAllowances(isEmpIntern ? '0' : String(emp.total_allowances || emp.allowances || ''));
+      setNewBonus(isEmpIntern ? '0' : String(emp.bonus || ''));
       setNewDesignationId(String(emp.designation_id || ''));
       
+      const basicVal = Number(emp.basic_salary || 0);
+      const hraVal = isEmpIntern ? 0 : Number(emp.hra || 0);
       const percentage = basicVal > 0 ? Math.round((hraVal / basicVal) * 100) : 0;
-      setHraPercentage(String(percentage));
+      setHraPercentage(isEmpIntern ? '0' : String(percentage));
     }
   };
 
@@ -154,6 +158,56 @@ export default function SalaryRevisionsPage() {
     const percentVal = Number(val) || 0;
     const basicVal = Number(newBasic) || 0;
     setNewHra(String(Math.round((basicVal * percentVal) / 100)));
+  };
+
+  useEffect(() => {
+    if (isCtcFocused) return;
+    const gross = (Number(newBasic) || 0) + (Number(newHra) || 0) + (Number(newAllowances) || 0) + (Number(newBonus) || 0);
+    const annualCTC = gross * 12;
+    if (Math.round(annualCTC) !== Number(annualCTCInput)) {
+      setAnnualCTCInput(annualCTC > 0 ? String(Math.round(annualCTC)) : '');
+    }
+  }, [newBasic, newHra, newAllowances, newBonus, annualCTCInput, isCtcFocused]);
+
+  useEffect(() => {
+    if (isIntern) {
+      setNewHra('0');
+      setHraPercentage('0');
+      setNewAllowances('0');
+      setNewBonus('0');
+    }
+  }, [isIntern]);
+
+  const handleAnnualCTCChange = (valStr: string) => {
+    setAnnualCTCInput(valStr);
+    const val = Number(valStr);
+    if (!isNaN(val) && val > 0) {
+      if (isIntern) {
+        const stipendVal = Math.round(val / 12);
+        setNewBasic(String(stipendVal));
+        setHraPercentage('0');
+        setNewHra('0');
+        setNewAllowances('0');
+        setNewBonus('0');
+      } else {
+        const monthlyGross = val / 12;
+        const basicVal = Math.round(monthlyGross * 0.50);
+        const hraVal = Math.round(basicVal * 0.40);
+        const allowancesVal = Math.round(monthlyGross - basicVal - hraVal);
+        
+        setNewBasic(String(basicVal));
+        setHraPercentage('40');
+        setNewHra(String(hraVal));
+        setNewAllowances(String(allowancesVal));
+        setNewBonus('0');
+      }
+    } else {
+      setNewBasic('');
+      setHraPercentage('');
+      setNewHra('');
+      setNewAllowances('');
+      setNewBonus('');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -502,58 +556,81 @@ export default function SalaryRevisionsPage() {
                 </select>
               </div>
 
+              {/* Annual CTC Input */}
+              <div className="space-y-1.5 border-b border-slate-100 pb-3">
+                <Label className="text-xs font-semibold text-slate-700">Annual CTC</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                  <Input
+                    type="number"
+                    value={annualCTCInput}
+                    onFocus={() => setIsCtcFocused(true)}
+                    onBlur={() => setIsCtcFocused(false)}
+                    onChange={(e) => handleAnnualCTCChange(e.target.value)}
+                    placeholder={isIntern ? "e.g. 180000" : "e.g. 360000"}
+                    className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
               {/* Form Input Grid */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className={isIntern ? "grid grid-cols-1" : "grid grid-cols-2 gap-3"}>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">New Basic Salary <span className="text-red-500">*</span></Label>
+                  <Label className="text-xs font-semibold text-slate-700">
+                    {isIntern ? 'New Stipend' : 'New Basic Salary'} <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     type="number"
                     value={newBasic}
                     onChange={(e) => handleBasicChange(e.target.value)}
-                    placeholder="e.g. 35000"
+                    placeholder={isIntern ? "e.g. 15000" : "e.g. 35000"}
                     className="h-10 border-slate-200 rounded-xl"
                     required
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-xs font-semibold text-slate-700">New HRA (%) <span className="text-red-500">*</span></Label>
-                    {newHra && <span className="text-[10px] font-bold text-slate-500">₹{Number(newHra).toLocaleString('en-IN')}</span>}
-                  </div>
-                  <Input
-                    type="number"
-                    value={hraPercentage}
-                    onChange={(e) => handleHraPercentageChange(e.target.value)}
-                    placeholder="e.g. 40"
-                    className="h-10 border-slate-200 rounded-xl"
-                    required
-                  />
-                </div>
+                {!isIntern && (
+                  <>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-xs font-semibold text-slate-700">New HRA (%) <span className="text-red-500">*</span></Label>
+                        {newHra && <span className="text-[10px] font-bold text-slate-500">₹{Number(newHra).toLocaleString('en-IN')}</span>}
+                      </div>
+                      <Input
+                        type="number"
+                        value={hraPercentage}
+                        onChange={(e) => handleHraPercentageChange(e.target.value)}
+                        placeholder="e.g. 40"
+                        className="h-10 border-slate-200 rounded-xl"
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">New Allowances <span className="text-red-500">*</span></Label>
-                  <Input
-                    type="number"
-                    value={newAllowances}
-                    onChange={(e) => setNewAllowances(e.target.value)}
-                    placeholder="e.g. 10000"
-                    className="h-10 border-slate-200 rounded-xl"
-                    required
-                  />
-                </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-700">New Allowances <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="number"
+                        value={newAllowances}
+                        onChange={(e) => setNewAllowances(e.target.value)}
+                        placeholder="e.g. 10000"
+                        className="h-10 border-slate-200 rounded-xl"
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">New Monthly Bonus <span className="text-red-500">*</span></Label>
-                  <Input
-                    type="number"
-                    value={newBonus}
-                    onChange={(e) => setNewBonus(e.target.value)}
-                    placeholder="e.g. 5000"
-                    className="h-10 border-slate-200 rounded-xl"
-                    required
-                  />
-                </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-700">New Monthly Bonus <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="number"
+                        value={newBonus}
+                        onChange={(e) => setNewBonus(e.target.value)}
+                        placeholder="e.g. 5000"
+                        className="h-10 border-slate-200 rounded-xl"
+                        required
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -619,7 +696,7 @@ export default function SalaryRevisionsPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-500 flex items-center gap-1.5">
                       <User size={13} className="text-slate-400" />
-                      Employee Current CTC:
+                      {isIntern ? 'Employee Current Stipend:' : 'Employee Current CTC:'}
                     </span>
                     <span className="font-bold text-slate-800">
                       ₹{currentGross.toLocaleString('en-IN')}/mo
@@ -629,7 +706,7 @@ export default function SalaryRevisionsPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-500 flex items-center gap-1.5">
                       <Sparkles size={13} className="text-amber-400" />
-                      Proposed New CTC:
+                      {isIntern ? 'Proposed New Stipend:' : 'Proposed New CTC:'}
                     </span>
                     <span className="font-bold text-blue-600">
                       ₹{revisedGross.toLocaleString('en-IN')}/mo
@@ -637,7 +714,7 @@ export default function SalaryRevisionsPage() {
                   </div>
 
                   <div className="flex items-center justify-between border-t border-slate-200/50 pt-2 font-bold text-slate-800">
-                    <span>Proposed Package Increase:</span>
+                    <span>{isIntern ? 'Proposed Stipend Increase:' : 'Proposed Package Increase:'}</span>
                     <span className={`px-2 py-0.5 rounded-lg text-[10px] ${
                       Number(incrementPercent) >= 0 
                         ? 'text-green-700 bg-green-50' 

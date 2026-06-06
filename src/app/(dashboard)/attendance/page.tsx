@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useWorksheet, useSaveBulkAttendance, useMonthlyReport, WorksheetItem } from '@/hooks/useAttendance';
+import { useWorksheet, useSaveBulkAttendance, useMonthlyReport, WorksheetItem, useSaveAttendance } from '@/hooks/useAttendance';
 import { useDepartments } from '@/hooks/useDepartments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,11 +11,19 @@ import {
   Loader2, Clock, ChevronLeft, ChevronRight, BarChart3,
   CheckSquare, Square, Save, Check, Plane,
   CalendarDays, List, CheckCircle2, XCircle,
-  AlertCircle, Timer, Minus, TrendingUp, LogIn, LogOut,
+  AlertCircle, Timer, Minus, TrendingUp, LogIn, LogOut, Edit, AlertTriangle
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { resolveRoleTier } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 // ────────────────────────────────────────────────────────────────
 // Shared constants
@@ -95,6 +103,20 @@ function TodayAttendanceCard({ employeeId }: { employeeId?: number }) {
   });
 
   const row: WorksheetItem | undefined = data?.data?.[0];
+  const { mutate: saveAttendance, isPending: isSaving } = useSaveAttendance();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [checkInInput, setCheckInInput] = useState('');
+  const [checkOutInput, setCheckOutInput] = useState('');
+  const [showWarning, setShowWarning] = useState(false);
+
+  // Sync inputs when row changes
+  useEffect(() => {
+    if (row) {
+      setCheckInInput(row.check_in || '');
+      setCheckOutInput(row.check_out || '');
+    }
+  }, [row]);
 
   const dateLabel = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -118,6 +140,45 @@ function TodayAttendanceCard({ employeeId }: { employeeId?: number }) {
     );
   }
 
+  const handleSave = (force = false) => {
+    if (!checkInInput) {
+      toast.error('Please enter a Check In time');
+      return;
+    }
+
+    if (checkOutInput) {
+      const [inH, inM] = checkInInput.split(':').map(Number);
+      const [outH, outM] = checkOutInput.split(':').map(Number);
+      const inMinutes = inH * 60 + inM;
+      const outMinutes = outH * 60 + outM;
+
+      if (outMinutes <= inMinutes) {
+        toast.error('Check Out time must be after Check In time');
+        return;
+      }
+
+      const workedMinutes = outMinutes - inMinutes;
+      if (workedMinutes < 9 * 60 && !force) {
+        setShowWarning(true);
+        return;
+      }
+    }
+
+    saveAttendance({
+      employee_id: row.employee_id,
+      date: today,
+      check_in: checkInInput,
+      check_out: checkOutInput || undefined,
+      status: row.status,
+      note: row.note,
+    }, {
+      onSuccess: () => {
+        setIsEditing(false);
+        setShowWarning(false);
+      }
+    });
+  };
+
   const statusKey = (row.status as AttendanceStatus) in STATUS_CFG
     ? (row.status as AttendanceStatus)
     : 'absent';
@@ -131,10 +192,23 @@ function TodayAttendanceCard({ employeeId }: { employeeId?: number }) {
           <p className="text-sm font-semibold text-slate-700">{dateLabel}</p>
           <p className="text-xs text-slate-400 mt-0.5">Today's attendance record</p>
         </div>
-        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
-          <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-          {cfg.label}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
+            <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+            {cfg.label}
+          </span>
+          {!row.is_saved && !isEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+              className="h-8 text-xs gap-1 border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg"
+            >
+              <Edit size={12} />
+              Update Times
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Check-in / Check-out cards */}
@@ -144,15 +218,26 @@ function TodayAttendanceCard({ employeeId }: { employeeId?: number }) {
             <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
               <LogIn size={16} className="text-emerald-600" />
             </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium">Check In</p>
-              <p className="text-xl font-bold text-slate-800">{fmt12(row.check_in)}</p>
+            <div className="flex-1">
+              <p className="text-xs text-slate-400 font-medium mb-1">Check In</p>
+              {isEditing ? (
+                <Input
+                  type="time"
+                  value={checkInInput}
+                  onChange={e => setCheckInInput(e.target.value)}
+                  className="h-9 font-mono text-sm bg-transparent border-slate-200 w-32 focus-visible:ring-1"
+                />
+              ) : (
+                <p className="text-xl font-bold text-slate-800">{fmt12(row.check_in)}</p>
+              )}
             </div>
           </div>
-          {row.check_in ? (
-            <p className="text-xs text-emerald-600 font-medium">✓ Checked in</p>
-          ) : (
-            <p className="text-xs text-slate-300">Not yet checked in</p>
+          {!isEditing && (
+            row.check_in ? (
+              <p className="text-xs text-emerald-600 font-medium">✓ Checked in</p>
+            ) : (
+              <p className="text-xs text-slate-300">Not yet checked in</p>
+            )
           )}
         </div>
 
@@ -161,15 +246,26 @@ function TodayAttendanceCard({ employeeId }: { employeeId?: number }) {
             <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
               <LogOut size={16} className="text-blue-600" />
             </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium">Check Out</p>
-              <p className="text-xl font-bold text-slate-800">{fmt12(row.check_out)}</p>
+            <div className="flex-1">
+              <p className="text-xs text-slate-400 font-medium mb-1">Check Out</p>
+              {isEditing ? (
+                <Input
+                  type="time"
+                  value={checkOutInput}
+                  onChange={e => setCheckOutInput(e.target.value)}
+                  className="h-9 font-mono text-sm bg-transparent border-slate-200 w-32 focus-visible:ring-1"
+                />
+              ) : (
+                <p className="text-xl font-bold text-slate-800">{fmt12(row.check_out)}</p>
+              )}
             </div>
           </div>
-          {row.check_out ? (
-            <p className="text-xs text-blue-600 font-medium">✓ Checked out</p>
-          ) : (
-            <p className="text-xs text-slate-300">Not yet checked out</p>
+          {!isEditing && (
+            row.check_out ? (
+              <p className="text-xs text-blue-600 font-medium">✓ Checked out</p>
+            ) : (
+              <p className="text-xs text-slate-300">Not yet checked out</p>
+            )
           )}
         </div>
       </div>
@@ -205,6 +301,65 @@ function TodayAttendanceCard({ employeeId }: { employeeId?: number }) {
           </div>
         )}
       </div>
+
+      {isEditing && (
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setIsEditing(false);
+              if (row) {
+                setCheckInInput(row.check_in || '');
+                setCheckOutInput(row.check_out || '');
+              }
+            }}
+            className="h-9 px-4 text-xs font-semibold border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl animate-in fade-in duration-200"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            disabled={isSaving}
+            onClick={() => handleSave(false)}
+            className="bg-blue-600 hover:bg-blue-500 text-white h-9 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm animate-in fade-in duration-200"
+          >
+            {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+            Save Times
+          </Button>
+        </div>
+      )}
+
+      {/* 9-Hour early logout warning dialog */}
+      <Dialog open={showWarning} onOpenChange={setShowWarning}>
+        <DialogContent className="sm:max-w-md bg-white border border-slate-100 shadow-xl rounded-2xl p-6 animate-in zoom-in-95 duration-150">
+          <DialogHeader className="flex flex-col items-center text-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center border border-amber-100 animate-bounce">
+              <AlertCircle className="text-amber-500 w-6 h-6" />
+            </div>
+            <DialogTitle className="text-base font-bold text-slate-800">Still Time Not Complete</DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 leading-relaxed max-w-[280px]">
+              You must work a mandatory 9 hours. Saving this logout time will record less than 9 hours of work. Do you want to logout anyway or continue working?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex sm:flex-row flex-col-reverse gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowWarning(false)}
+              className="flex-1 h-10 text-xs font-semibold border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl"
+            >
+              Continue Working
+            </Button>
+            <Button
+              onClick={() => handleSave(true)}
+              disabled={isSaving}
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white h-10 text-xs font-semibold rounded-xl shadow-sm"
+            >
+              {isSaving ? <Loader2 size={13} className="animate-spin" /> : "Logout Anyway"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1495,12 +1650,12 @@ export default function AttendancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">
-            {isSuperAdminOrHR ? 'Organization Attendance' : `${user?.employee?.department ? `${user.employee.department} Department` : 'Team'} Attendance`}
+            {isSuperAdminOrHR ? 'Organization Attendance' : 'My Team Attendance'}
           </h2>
           <p className="text-sm text-slate-400">
             {isSuperAdminOrHR 
               ? 'Direct tabular row-management sheet layout for all departments' 
-              : `Review attendance and leave calendar for members reporting in your department`}
+              : 'Review attendance and leave calendar for members reporting to you'}
           </p>
         </div>
       </div>

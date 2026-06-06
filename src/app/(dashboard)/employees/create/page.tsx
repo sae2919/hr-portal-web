@@ -202,13 +202,15 @@ export default function CreateEmployeePage() {
   const [allowancesState, setAllowancesState] = useState({
     transport: false, food: false, medical: false, special: false, other: false,
   });
+  const [ctcInput, setCtcInput] = useState<string>('');
+  const [isCtcFocused, setIsCtcFocused] = useState(false);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       employment_type: 'full_time', status: 'active', country: 'India',
       basic_salary: 0, hra: 0, bonus: 0,
-      allowances: [], other_deductions: 0, tds_amount: 0, pt_state: '',
+      allowances: [], other_deductions: 0, tds_amount: 0, pt_state: 'Telangana',
     },
   });
 
@@ -219,6 +221,30 @@ export default function CreateEmployeePage() {
   const otherDed   = watch('other_deductions') || 0;
   const tdsAmt     = watch('tds_amount')   || 0;
   const ptState    = watch('pt_state')     || '';
+  const employmentType = watch('employment_type') || 'full_time';
+  const showFullStructure = employmentType === 'full_time';
+
+  useEffect(() => {
+    if (employmentType === 'intern') {
+      setValue('hra', 0, { shouldValidate: true });
+      setValue('bonus', 0, { shouldValidate: true });
+      setValue('allowances', [], { shouldValidate: true });
+      setValue('other_deductions', 0, { shouldValidate: true });
+      setValue('tds_amount', 0, { shouldValidate: true });
+      setValue('pt_state', '', { shouldValidate: true });
+      setPfPercentage(0);
+      setHraPercentage(0);
+      setEsiEnabled(false);
+      setTdsEnabled(false);
+      setAllowancesState({
+        transport: false, food: false, medical: false, special: false, other: false,
+      });
+    } else if (employmentType === 'full_time') {
+      if (!watch('pt_state')) {
+        setValue('pt_state', 'Telangana', { shouldValidate: true });
+      }
+    }
+  }, [employmentType, setValue]);
 
   useEffect(() => {
     const calculatedHra = Math.round((basic * hraPercentage) / 100);
@@ -239,6 +265,84 @@ export default function CreateEmployeePage() {
   const totalDeductions = pfAmount + esiEmployee + ptAmount + tdsDeduction + otherDed;
   const netSalary       = gross - totalDeductions;
   const ctc             = gross + esiEmployer + pfAmount;
+
+  useEffect(() => {
+    if (isCtcFocused) return;
+    const roundedCtc = Math.round(ctc * 12);
+    if (roundedCtc !== Number(ctcInput)) {
+      setCtcInput(roundedCtc > 0 ? String(roundedCtc) : '');
+    }
+  }, [ctc, ctcInput, isCtcFocused]);
+
+  const handleAnnualCTCChange = (valStr: string) => {
+    setCtcInput(valStr);
+    const val = Number(valStr);
+    if (!isNaN(val) && val > 0) {
+      const monthlyCTC = val / 12;
+      
+      if (employmentType === 'intern') {
+        const stipend = Math.round(monthlyCTC);
+        setValue('basic_salary', stipend, { shouldValidate: true });
+        setValue('hra', 0, { shouldValidate: true });
+        setValue('bonus', 0, { shouldValidate: true });
+        setValue('allowances', [], { shouldValidate: true });
+      } else {
+        let calculatedGross = 0;
+        if (esiEnabled) {
+          const factorWithEsi = 1 + (pfPercentage / 100) + 0.0325;
+          const grossWithEsi = monthlyCTC / factorWithEsi;
+          if (grossWithEsi <= 21000) {
+            calculatedGross = grossWithEsi;
+          } else {
+            const factorWithoutEsi = 1 + (pfPercentage / 100);
+            calculatedGross = monthlyCTC / factorWithoutEsi;
+          }
+        } else {
+          const factorWithoutEsi = 1 + (pfPercentage / 100);
+          calculatedGross = monthlyCTC / factorWithoutEsi;
+        }
+
+        calculatedGross = Math.round(calculatedGross);
+
+        const calculatedBasic = Math.round(calculatedGross * 0.50);
+        setHraPercentage(40);
+        const calculatedHra = Math.round(calculatedBasic * 0.40);
+        const calculatedSpecial = Math.max(0, calculatedGross - calculatedBasic - calculatedHra);
+
+        setValue('basic_salary', calculatedBasic, { shouldValidate: true });
+        setValue('hra', calculatedHra, { shouldValidate: true });
+        setValue('bonus', 0, { shouldValidate: true });
+
+        setAllowancesState({
+          transport: false,
+          food: false,
+          medical: false,
+          special: calculatedSpecial > 0,
+          other: false,
+        });
+
+        if (calculatedSpecial > 0) {
+          setValue('allowances', [{ type: 'special', amount: calculatedSpecial }], { shouldValidate: true });
+        } else {
+          setValue('allowances', [], { shouldValidate: true });
+        }
+      }
+    } else {
+      setValue('basic_salary', 0, { shouldValidate: true });
+      setValue('hra', 0, { shouldValidate: true });
+      setValue('bonus', 0, { shouldValidate: true });
+      setAllowancesState({
+        transport: false, food: false, medical: false, special: false, other: false,
+      });
+      setValue('allowances', [], { shouldValidate: true });
+    }
+  };
+
+  useEffect(() => {
+    if (ctcInput && Number(ctcInput) > 0) {
+      handleAnnualCTCChange(ctcInput);
+    }
+  }, [pfPercentage, esiEnabled, employmentType]);
 
   const selectedDeptId = watch('department_id');
   const { data: designationsResponse } = useDesignations(
@@ -538,234 +642,260 @@ export default function CreateEmployeePage() {
 
           <div className="space-y-4">
 
+            {/* Annual CTC Input */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-slate-100 pb-3">
+              <Field label="Annual CTC" hint="Enter target annual CTC to auto-fill components">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 360000"
+                    value={ctcInput}
+                    onFocus={() => setIsCtcFocused(true)}
+                    onBlur={() => setIsCtcFocused(false)}
+                    onChange={(e) => handleAnnualCTCChange(e.target.value)}
+                    className="h-9 pl-7 focus:ring-blue-500/20"
+                  />
+                </div>
+              </Field>
+            </div>
+
             {/* Earnings */}
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Earnings</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Field label="Basic Salary" required error={errors.basic_salary?.message}>
+                <Field label={employmentType === 'intern' ? 'Stipend' : 'Basic Salary'} required error={errors.basic_salary?.message}>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                    <Input type="number" min="0" placeholder="50000"
+                    <Input type="number" min="0" placeholder={employmentType === 'intern' ? '10000' : '50000'}
                       {...register('basic_salary', { valueAsNumber: true })} className="h-9 pl-7" />
                   </div>
                 </Field>
-                <Field label={`HRA (%) ${hra > 0 ? `· ${fmt(hra)}` : ''}`}>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      placeholder="e.g. 40"
-                      value={hraPercentage || ''}
-                      onChange={(e) => {
-                        const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                        setHraPercentage(val);
-                      }}
-                      className="h-9 pr-7"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
-                  </div>
-                </Field>
-                <Field label="Bonus">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                    <Input type="number" min="0" placeholder="2000"
-                      {...register('bonus', { valueAsNumber: true })} className="h-9 pl-7" />
-                  </div>
-                </Field>
-              </div>
-            </div>
-
-            {/* Allowances — 2 per row grid */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Allowances</p>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  {ALLOWANCE_TYPES.map((type, idx) => (
-                    <div
-                      key={type}
-                      className={`flex items-center justify-between px-3 py-2 bg-white
-                        ${idx % 2 === 0 && idx !== ALLOWANCE_TYPES.length - 1 ? 'md:border-r border-slate-100' : ''}
-                        ${idx < ALLOWANCE_TYPES.length - (ALLOWANCE_TYPES.length % 2 === 0 ? 2 : 1) ? 'border-b border-slate-100' : ''}
-                        ${idx === ALLOWANCE_TYPES.length - 1 && ALLOWANCE_TYPES.length % 2 !== 0 ? 'md:col-span-2' : ''}
-                      `}
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`allow-${type}`}
-                          checked={allowancesState[type]}
-                          onChange={(e) => toggleAllowance(type, e.target.checked)}
-                          className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <label htmlFor={`allow-${type}`} className="text-sm font-medium text-slate-700 capitalize">
-                          {type} Allowance
-                        </label>
-                      </div>
-                      {allowancesState[type] && (
+                {showFullStructure && (
+                  <>
+                    <Field label={`HRA (%) ${hra > 0 ? `· ${fmt(hra)}` : ''}`}>
+                      <div className="relative">
                         <Input
                           type="number"
-                          placeholder="₹ Amount"
-                          value={getAllowanceAmount(type)}
-                          onChange={(e) => updateAllowanceAmount(type, Number(e.target.value))}
-                          className="w-28 h-7 text-sm"
-                          min={0}
+                          min="0"
+                          max="100"
+                          placeholder="e.g. 40"
+                          value={hraPercentage || ''}
+                          onChange={(e) => {
+                            const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                            setHraPercentage(val);
+                          }}
+                          className="h-9 pr-7"
                         />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {totalAllowances > 0 && (
-                  <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Total Allowances</span>
-                    <span className="text-sm font-semibold text-blue-600">{fmt(totalAllowances)}/month</span>
-                  </div>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                      </div>
+                    </Field>
+                    <Field label="Bonus">
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                        <Input type="number" min="0" placeholder="2000"
+                          {...register('bonus', { valueAsNumber: true })} className="h-9 pl-7" />
+                      </div>
+                    </Field>
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Deductions */}
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Deductions</p>
-                <div className="flex items-center gap-1.5">
-                  <Toggle
-                    label="ESI"
-                    sublabel={esiEnabled ? (esiApplicable ? `Emp: ${fmt(esiEmployee)} · Emplr: ${fmt(esiEmployer)}` : 'Gross > ₹21,000') : 'Employee & employer'}
-                    enabled={esiEnabled}
-                    onToggle={() => setEsiEnabled(p => !p)}
-                    color="green"
-                  />
-                  <Toggle
-                    label="TDS"
-                    sublabel={tdsEnabled ? (tdsAmt > 0 ? fmt(tdsAmt) + '/month' : 'Enter below') : 'Tax deducted at source'}
-                    enabled={tdsEnabled}
-                    onToggle={() => setTdsEnabled(p => !p)}
-                    color="orange"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-
-                {/* PF + PT in one row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium text-slate-600">PF Deduction</Label>
-                    <div className="flex items-center gap-2">
-                      <select value={pfPercentage} onChange={(e) => setPfPercentage(Number(e.target.value))}
-                        className="w-20 border border-slate-200 rounded-lg px-2 text-sm h-9 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white">
-                        {Array.from({ length: 13 }, (_, i) => i).map(p => (
-                          <option key={p} value={p}>{p}%</option>
-                        ))}
-                      </select>
-                      <div className="flex-1 h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 flex items-center gap-1">
-                        <span className="text-sm text-slate-400">₹</span>
-                        <span className="text-sm font-semibold text-slate-700">
-                          {Math.round(pfAmount).toLocaleString('en-IN')}
-                        </span>
-                      </div>
+            {showFullStructure && (
+              <>
+                {/* Allowances — 2 per row grid */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Allowances</p>
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="grid grid-cols-1 md:grid-cols-2">
+                      {ALLOWANCE_TYPES.map((type, idx) => (
+                        <div
+                          key={type}
+                          className={`flex items-center justify-between px-3 py-2 bg-white
+                            ${idx % 2 === 0 && idx !== ALLOWANCE_TYPES.length - 1 ? 'md:border-r border-slate-100' : ''}
+                            ${idx < ALLOWANCE_TYPES.length - (ALLOWANCE_TYPES.length % 2 === 0 ? 2 : 1) ? 'border-b border-slate-100' : ''}
+                            ${idx === ALLOWANCE_TYPES.length - 1 && ALLOWANCE_TYPES.length % 2 !== 0 ? 'md:col-span-2' : ''}
+                          `}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`allow-${type}`}
+                              checked={allowancesState[type]}
+                              onChange={(e) => toggleAllowance(type, e.target.checked)}
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor={`allow-${type}`} className="text-sm font-medium text-slate-700 capitalize">
+                              {type} Allowance
+                            </label>
+                          </div>
+                          {allowancesState[type] && (
+                            <Input
+                              type="number"
+                              placeholder="₹ Amount"
+                              value={getAllowanceAmount(type)}
+                              onChange={(e) => updateAllowanceAmount(type, Number(e.target.value))}
+                              className="w-28 h-7 text-sm"
+                              min={0}
+                            />
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <p className="text-xs text-slate-400">
-                      {pfPercentage === 0 ? 'No PF deduction' : `${pfPercentage}% of ${fmt(gross)} = ${fmt(pfAmount)}/mo`}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium text-slate-600">Professional Tax</Label>
-                    <div className="flex gap-2">
-                      <select {...register('pt_state')}
-                        className={`flex-1 border rounded-lg px-3 text-sm h-9 focus:outline-none focus:ring-2 transition-colors bg-white ${
-                          ptState && ptIsNoTax ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-500/20' : 'border-slate-200 focus:ring-blue-500/20'
-                        }`}>
-                        <option value="">Select state for PT</option>
-                        {PT_STATES.map(s => (
-                          <option key={s} value={s}>{s}{isNoPTState(s) ? ' (No PT)' : ''}</option>
-                        ))}
-                      </select>
-                      <div className="w-32 h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 flex items-center gap-1">
-                        <span className="text-sm text-slate-400">₹</span>
-                        <span className="text-sm font-semibold text-slate-700">
-                          {Math.round(ptAmount).toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                    </div>
-                    {!ptState && <p className="text-xs text-slate-400">Select state to auto-calculate PT</p>}
-                    {ptState && ptIsNoTax && (
-                      <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={10} />No PT in {ptState}</p>
-                    )}
-                    {ptState && !ptIsNoTax && ptAmount > 0 && <p className="text-xs text-slate-400">PT: {fmt(ptAmount)}/month</p>}
-                    {ptState && !ptIsNoTax && ptAmount === 0 && <p className="text-xs text-slate-400">Below PT threshold in {ptState}</p>}
-                  </div>
-                </div>
-
-                {/* ESI panel */}
-                {esiEnabled && (
-                  <div className={`rounded-lg border p-2.5 ${esiApplicable ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
-                    {esiApplicable ? (
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <p className="text-xs text-slate-500 mb-0.5">Employee ESI (0.75%)</p>
-                          <p className="text-sm font-bold text-green-700">{fmt(esiEmployee)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500 mb-0.5">Employer ESI (3.25%)</p>
-                          <p className="text-sm font-bold text-green-700">{fmt(esiEmployer)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500 mb-0.5">Eligibility</p>
-                          <p className="text-xs font-semibold text-green-700">✓ Gross ≤ ₹21,000</p>
-                          <p className="text-xs text-slate-400">{fmt(gross)}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                        <div>
-                          <p className="text-sm font-semibold text-orange-700">ESI not applicable</p>
-                          <p className="text-xs text-orange-600">Gross {fmt(gross)} exceeds ₹21,000 limit.</p>
-                        </div>
+                    {totalAllowances > 0 && (
+                      <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                        <span className="text-sm text-slate-500">Total Allowances</span>
+                        <span className="text-sm font-semibold text-blue-600">{fmt(totalAllowances)}/month</span>
                       </div>
                     )}
                   </div>
-                )}
+                </div>
 
-                {/* TDS panel */}
-                {tdsEnabled && (
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5">
-                    <p className="text-xs font-semibold text-orange-700 mb-1.5">TDS — Tax Deducted at Source</p>
+                {/* Deductions */}
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Deductions</p>
+                    <div className="flex items-center gap-1.5">
+                      <Toggle
+                        label="ESI"
+                        sublabel={esiEnabled ? (esiApplicable ? `Emp: ${fmt(esiEmployee)} · Emplr: ${fmt(esiEmployer)}` : 'Gross > ₹21,000') : 'Employee & employer'}
+                        enabled={esiEnabled}
+                        onToggle={() => setEsiEnabled(p => !p)}
+                        color="green"
+                      />
+                      <Toggle
+                        label="TDS"
+                        sublabel={tdsEnabled ? (tdsAmt > 0 ? fmt(tdsAmt) + '/month' : 'Enter below') : 'Tax deducted at source'}
+                        enabled={tdsEnabled}
+                        onToggle={() => setTdsEnabled(p => !p)}
+                        color="orange"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+
+                    {/* PF + PT in one row */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <Field label="Monthly TDS Amount" hint="Enter monthly TDS to deduct" error={errors.tds_amount?.message}>
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium text-slate-600">PF Deduction</Label>
+                        <div className="flex items-center gap-2">
+                          <select value={pfPercentage} onChange={(e) => setPfPercentage(Number(e.target.value))}
+                            className="w-20 border border-slate-200 rounded-lg px-2 text-sm h-9 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white">
+                            {Array.from({ length: 13 }, (_, i) => i).map(p => (
+                              <option key={p} value={p}>{p}%</option>
+                            ))}
+                          </select>
+                          <div className="flex-1 h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 flex items-center gap-1">
+                            <span className="text-sm text-slate-400">₹</span>
+                            <span className="text-sm font-semibold text-slate-700">
+                              {Math.round(pfAmount).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {pfPercentage === 0 ? 'No PF deduction' : `${pfPercentage}% of ${fmt(gross)} = ${fmt(pfAmount)}/mo`}
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium text-slate-600">Professional Tax</Label>
+                        <div className="flex gap-2">
+                          <select {...register('pt_state')}
+                            className={`flex-1 border rounded-lg px-3 text-sm h-9 focus:outline-none focus:ring-2 transition-colors bg-white ${
+                              ptState && ptIsNoTax ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-500/20' : 'border-slate-200 focus:ring-blue-500/20'
+                            }`}>
+                            <option value="">Select state for PT</option>
+                            {PT_STATES.map(s => (
+                              <option key={s} value={s}>{s}{isNoPTState(s) ? ' (No PT)' : ''}</option>
+                            ))}
+                          </select>
+                          <div className="w-32 h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 flex items-center gap-1">
+                            <span className="text-sm text-slate-400">₹</span>
+                            <span className="text-sm font-semibold text-slate-700">
+                              {Math.round(ptAmount).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+                        {!ptState && <p className="text-xs text-slate-400">Select state to auto-calculate PT</p>}
+                        {ptState && ptIsNoTax && (
+                          <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={10} />No PT in {ptState}</p>
+                        )}
+                        {ptState && !ptIsNoTax && ptAmount > 0 && <p className="text-xs text-slate-400">PT: {fmt(ptAmount)}/month</p>}
+                        {ptState && !ptIsNoTax && ptAmount === 0 && <p className="text-xs text-slate-400">Below PT threshold in {ptState}</p>}
+                      </div>
+                    </div>
+
+                    {/* ESI panel */}
+                    {esiEnabled && (
+                      <div className={`rounded-lg border p-2.5 ${esiApplicable ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                        {esiApplicable ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <p className="text-xs text-slate-500 mb-0.5">Employee ESI (0.75%)</p>
+                              <p className="text-sm font-bold text-green-700">{fmt(esiEmployee)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500 mb-0.5">Employer ESI (3.25%)</p>
+                              <p className="text-sm font-bold text-green-700">{fmt(esiEmployer)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500 mb-0.5">Eligibility</p>
+                              <p className="text-xs font-semibold text-green-700">✓ Gross ≤ ₹21,000</p>
+                              <p className="text-xs text-slate-400">{fmt(gross)}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-semibold text-orange-700">ESI not applicable</p>
+                              <p className="text-xs text-orange-600">Gross {fmt(gross)} exceeds ₹21,000 limit.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TDS panel */}
+                    {tdsEnabled && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5">
+                        <p className="text-xs font-semibold text-orange-700 mb-1.5">TDS — Tax Deducted at Source</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Field label="Monthly TDS Amount" hint="Enter monthly TDS to deduct" error={errors.tds_amount?.message}>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                              <Input type="number" min="0" placeholder="0"
+                                {...register('tds_amount', { valueAsNumber: true })}
+                                className="h-9 pl-7 bg-white border-orange-200 focus:ring-orange-500/20" />
+                            </div>
+                          </Field>
+                          <div className="flex items-end pb-0.5">
+                            <p className="text-xs text-orange-600">
+                              Annual TDS: <span className="font-semibold">{fmt(tdsDeduction * 12)}</span>
+                              <br /><span className="text-slate-400">monthly × 12</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Other Deductions */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Field label="Other Deductions">
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
                           <Input type="number" min="0" placeholder="0"
-                            {...register('tds_amount', { valueAsNumber: true })}
-                            className="h-9 pl-7 bg-white border-orange-200 focus:ring-orange-500/20" />
+                            {...register('other_deductions', { valueAsNumber: true })} className="h-9 pl-7" />
                         </div>
                       </Field>
-                      <div className="flex items-end pb-0.5">
-                        <p className="text-xs text-orange-600">
-                          Annual TDS: <span className="font-semibold">{fmt(tdsDeduction * 12)}</span>
-                          <br /><span className="text-slate-400">monthly × 12</span>
-                        </p>
-                      </div>
                     </div>
+
                   </div>
-                )}
-
-                {/* Other Deductions */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Field label="Other Deductions">
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                      <Input type="number" min="0" placeholder="0"
-                        {...register('other_deductions', { valueAsNumber: true })} className="h-9 pl-7" />
-                    </div>
-                  </Field>
                 </div>
-
-              </div>
-            </div>
+              </>
+            )}
 
             {/* Salary Preview */}
             <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">

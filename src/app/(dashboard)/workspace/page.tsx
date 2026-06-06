@@ -176,6 +176,8 @@ function ManagerDashboard({ stats, userName, roleLabel, dailyQuote, todaySpecial
   stats: WorkspaceStats; userName: string; roleLabel: string;
   dailyQuote: any; todaySpecial: { birthdays: any[]; anniversaries: any[] };
 }) {
+  const { user } = useAuthStore();
+  const empId = user?.employee_id || user?.employee?.id;
   const ms = stats.manager_stats;
   const dept = stats.department || 'Your Department';
   const attendanceRate = ms?.dept_attendance_rate ?? 0;
@@ -239,7 +241,7 @@ function ManagerDashboard({ stats, userName, roleLabel, dailyQuote, todaySpecial
           <QuickAction href="/employees"    icon={Users}    label="Team Members" />
           <QuickAction href="/attendance"   icon={Clock}    label="Attendance" />
           <QuickAction href="/leaves"       icon={Calendar} label="Leave Requests" />
-          <QuickAction href="/profile/edit" icon={User}     label="My Profile" />
+          <QuickAction href={empId ? `/employees/${empId}` : "/profile/edit"} icon={User}     label="My Profile" />
         </div>
       </div>
     </div>
@@ -310,6 +312,8 @@ function EmployeeDashboard({ stats, userName, dailyQuote, todaySpecial }: {
   stats: WorkspaceStats; userName: string;
   dailyQuote: any; todaySpecial: { birthdays: any[]; anniversaries: any[] };
 }) {
+  const { user } = useAuthStore();
+  const empId = user?.employee_id || user?.employee?.id;
   const es = stats.employee_stats;
   const dept = stats.department || 'General';
 
@@ -360,7 +364,7 @@ function EmployeeDashboard({ stats, userName, dailyQuote, todaySpecial }: {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <QuickAction href="/profile/edit" icon={User}     label="Edit Profile" />
+          <QuickAction href={empId ? `/employees/${empId}` : "/profile/edit"} icon={User}     label="My Profile" />
           <QuickAction href="/attendance"   icon={Clock}    label="Attendance" />
           <QuickAction href="/leaves"       icon={Calendar} label="Apply Leave" />
           <QuickAction href="/payroll"      icon={Receipt}  label="My Payslips" />

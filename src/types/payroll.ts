@@ -41,7 +41,7 @@ export interface PayrollItem {
 
 
 export interface GeneratePayrollPayload {
-  employee_id: number;
+  employee_id: number | 'all';
   month: number;
   year: number;
   include_pf?: boolean;

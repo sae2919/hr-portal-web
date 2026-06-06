@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import { useLogout, resolveRoleTier } from '@/hooks/useAuth';
 import {
@@ -134,14 +135,18 @@ export function Header() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem className="cursor-pointer">
-              <User size={14} className="mr-2" />
-              My Profile
+            <DropdownMenuItem className="cursor-pointer" asChild>
+              <Link href={user?.employee_id || user?.employee?.id ? `/employees/${user.employee_id || user.employee?.id}` : '/profile/edit'}>
+                <User size={14} className="mr-2" />
+                My Profile
+              </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuItem className="cursor-pointer">
-              <Settings size={14} className="mr-2" />
-              Settings
+            <DropdownMenuItem className="cursor-pointer" asChild>
+              <Link href="/profile/edit">
+                <Settings size={14} className="mr-2" />
+                Settings
+              </Link>
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

@@ -138,10 +138,9 @@ export default function EmployeeDetailPage() {
     );
   }
 
-  const canEdit = hasPermission('edit employees');
-
-  const isAdminOrHR = hasRole('admin') || hasRole('super_admin') || hasRole('super admin') || hasRole('hr');
   const isOwnProfile = user?.employee_id === Number(employeeId) || user?.employee?.id === Number(employeeId);
+  const canEdit = hasPermission('edit employees') || isOwnProfile;
+  const isAdminOrHR = hasRole('admin') || hasRole('super_admin') || hasRole('super admin') || hasRole('hr');
   const showSensitive = isAdminOrHR || isOwnProfile;
 
   // Salary calculations (parse strings to numbers to avoid JS type coercion issues)
@@ -168,12 +167,15 @@ export default function EmployeeDetailPage() {
 
   const ptStateInfo = employee.pt_state ? PT_STATES.find(s => s.value === employee.pt_state) : null;
 
+  const hasEmployeesListAccess = isAdminOrHR || hasRole('manager') || hasRole('team_lead') || hasRole('sales_manager');
+  const backHref = hasEmployeesListAccess ? '/employees' : '/workspace';
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/employees" className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+          <Link href={backHref} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
             <ArrowLeft size={18} />
           </Link>
           <div className="flex items-center gap-4">
@@ -348,7 +350,17 @@ export default function EmployeeDetailPage() {
                     <div className="space-y-1.5">
                       <DetailRow label="Basic Salary" value={formatCurrency(employee.basic_salary)} />
                       <DetailRow label="HRA" value={formatCurrency(employee.hra)} />
-                      <DetailRow label="Allowances" value={formatCurrency(employee.allowances)} />
+                      {Array.isArray(employee.allowances) && employee.allowances.length > 0 ? (
+                        employee.allowances.map((allowance: any, idx: number) => (
+                          <DetailRow 
+                            key={idx}
+                            label={`${allowance.type.charAt(0).toUpperCase() + allowance.type.slice(1)} Allowance`} 
+                            value={formatCurrency(allowance.amount)} 
+                          />
+                        ))
+                      ) : (
+                        <DetailRow label="Allowances" value={formatCurrency(allowances)} />
+                      )}
                       <DetailRow label="Bonus" value={formatCurrency(employee.bonus)} />
                       <div className="border-t border-slate-100 pt-2 mt-2">
                         <DetailRow label="Gross Salary" value={<span className="font-semibold text-slate-700">{formatCurrency(grossSalary)}</span>} />

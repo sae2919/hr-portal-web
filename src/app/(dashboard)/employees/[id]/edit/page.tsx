@@ -67,7 +67,7 @@ function calculatePT(state: string, gross: number): number {
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val || 0);
 
-const selectCls = 'w-full h-9 border border-slate-300 rounded-lg px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20';
+const selectCls = 'w-full h-9 border border-slate-300 rounded-lg px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed';
 
 function Toggle({ enabled, onChange, label }: { enabled: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -120,7 +120,11 @@ export default function EditEmployeePage() {
   const params = useParams();
   const employeeId = params?.id as string;
   const queryClient = useQueryClient();
-  const { hasPermission } = useAuthStore();
+  const { hasPermission, user, hasRole } = useAuthStore();
+  const isOwnProfile = user?.employee_id === Number(employeeId) || user?.employee?.id === Number(employeeId);
+  const isAdminOrHR = hasRole('admin') || hasRole('super_admin') || hasRole('super admin') || hasRole('hr');
+  const canEdit = hasPermission('edit employees') || isOwnProfile;
+  const isRestrictedSelfEdit = isOwnProfile && !isAdminOrHR;
   const [mounted, setMounted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,6 +136,8 @@ export default function EditEmployeePage() {
   const [esiEnabled, setEsiEnabled] = useState(false);
   const [tdsEnabled, setTdsEnabled] = useState(false);
   const [hraPercentage, setHraPercentage] = useState<number>(0);
+  const [ctcInput, setCtcInput] = useState<string>('');
+  const [isCtcFocused, setIsCtcFocused] = useState(false);
 
   const [formData, setFormData] = useState({
     first_name: '', last_name: '', email: '', phone: '', gender: '' as '',
@@ -287,6 +293,21 @@ export default function EditEmployeePage() {
   };
 
   useEffect(() => {
+    if (esiEnabled) {
+      const gross = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
+      if (gross <= 21000) {
+        setFormData(prev => ({
+          ...prev,
+          esi_employee: Math.round(gross * 0.0075),
+          esi_employer: Math.round(gross * 0.0325),
+        }));
+      } else {
+        setFormData(prev => ({ ...prev, esi_employee: 0, esi_employer: 0 }));
+      }
+    }
+  }, [esiEnabled, formData.basic_salary, formData.hra, totalAllowances, formData.bonus]);
+
+  useEffect(() => {
     const gross = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
     setFormData(prev => ({ ...prev, pf_deduction: Math.round((gross * (prev.pf_percentage || 0)) / 100) }));
   }, [formData.basic_salary, formData.hra, formData.bonus, formData.pf_percentage, totalAllowances]);
@@ -297,7 +318,130 @@ export default function EditEmployeePage() {
     setFormData(prev => ({ ...prev, pt_amount: calculatedPt }));
   }, [formData.pt_state, formData.basic_salary, formData.hra, formData.bonus, totalAllowances]);
 
+  useEffect(() => {
+    const gross = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
+    const computedEsiEmployer = esiEnabled && gross <= 21000 ? Math.round(gross * 0.0325) : 0;
+    const computedPfDeduction = Math.round((gross * (formData.pf_percentage || 0)) / 100);
+    const computedMonthlyCtc = gross + computedEsiEmployer + computedPfDeduction;
+    setFormData(prev => {
+      if (prev.ctc !== computedMonthlyCtc) {
+        return { ...prev, ctc: computedMonthlyCtc };
+      }
+      return prev;
+    });
+  }, [formData.basic_salary, formData.hra, totalAllowances, formData.bonus, esiEnabled, formData.pf_percentage]);
+
+  useEffect(() => {
+    if (isCtcFocused) return;
+    const roundedCtc = Math.round(formData.ctc * 12);
+    if (roundedCtc !== Number(ctcInput)) {
+      setCtcInput(roundedCtc > 0 ? String(roundedCtc) : '');
+    }
+  }, [formData.ctc, ctcInput, isCtcFocused]);
+
+  const handleAnnualCTCChange = (valStr: string) => {
+    setCtcInput(valStr);
+    const val = Number(valStr);
+    if (!isNaN(val) && val > 0) {
+      const monthlyCTC = val / 12;
+      
+      if (formData.employment_type === 'intern') {
+        const stipend = Math.round(monthlyCTC);
+        setAllowancesState({ transport: false, food: false, medical: false, special: false, other: false });
+        setFormData(prev => ({
+          ...prev,
+          basic_salary: stipend,
+          hra: 0,
+          bonus: 0,
+          allowances: [],
+          ctc: Math.round(monthlyCTC),
+        }));
+      } else {
+        let calculatedGross = 0;
+        if (esiEnabled) {
+          const factorWithEsi = 1 + (formData.pf_percentage / 100) + 0.0325;
+          const grossWithEsi = monthlyCTC / factorWithEsi;
+          if (grossWithEsi <= 21000) {
+            calculatedGross = grossWithEsi;
+          } else {
+            const factorWithoutEsi = 1 + (formData.pf_percentage / 100);
+            calculatedGross = monthlyCTC / factorWithoutEsi;
+          }
+        } else {
+          const factorWithoutEsi = 1 + (formData.pf_percentage / 100);
+          calculatedGross = monthlyCTC / factorWithoutEsi;
+        }
+
+        calculatedGross = Math.round(calculatedGross);
+
+        const calculatedBasic = Math.round(calculatedGross * 0.50);
+        setHraPercentage(40);
+        const calculatedHra = Math.round(calculatedBasic * 0.40);
+        const calculatedSpecial = Math.max(0, calculatedGross - calculatedBasic - calculatedHra);
+
+        setAllowancesState({
+          transport: false,
+          food: false,
+          medical: false,
+          special: calculatedSpecial > 0,
+          other: false,
+        });
+
+        setFormData(prev => ({
+          ...prev,
+          basic_salary: calculatedBasic,
+          hra: calculatedHra,
+          bonus: 0,
+          allowances: calculatedSpecial > 0 ? [{ type: 'special', amount: calculatedSpecial }] : [],
+          ctc: Math.round(monthlyCTC),
+        }));
+      }
+    } else {
+      setAllowancesState({
+        transport: false, food: false, medical: false, special: false, other: false,
+      });
+      setFormData(prev => ({
+        ...prev,
+        basic_salary: 0,
+        hra: 0,
+        bonus: 0,
+        allowances: [],
+        ctc: 0,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    if (ctcInput && Number(ctcInput) > 0) {
+      handleAnnualCTCChange(ctcInput);
+    }
+  }, [formData.pf_percentage, esiEnabled, formData.employment_type]);
+
+  useEffect(() => {
+    if (formData.employment_type === 'intern') {
+      setAllowancesState({ transport: false, food: false, medical: false, special: false, other: false });
+      setFormData(prev => ({
+        ...prev,
+        hra: 0,
+        bonus: 0,
+        allowances: [],
+        pf_percentage: 0,
+        pf_deduction: 0,
+        esi_employee: 0,
+        esi_employer: 0,
+        pt_state: '',
+        pt_amount: 0,
+        tds_amount: 0,
+        other_deductions: 0,
+      }));
+      setHraPercentage(0);
+      setEsiEnabled(false);
+      setTdsEnabled(false);
+    }
+  }, [formData.employment_type]);
+
   const grossSalary = formData.basic_salary + formData.hra + totalAllowances + formData.bonus;
+  const showFullStructure = formData.employment_type === 'full_time';
   const esiApplicable = grossSalary <= 21000;
   const totalDeductions =
     (formData.pf_deduction || 0) +
@@ -306,7 +450,7 @@ export default function EditEmployeePage() {
     (tdsEnabled ? formData.tds_amount || 0 : 0) +
     (formData.other_deductions || 0);
   const netSalary = grossSalary - totalDeductions;
-  const annualCTC = formData.ctc || (netSalary * 12) + (esiEnabled ? (formData.esi_employer || 0) : 0) * 12;
+  const annualCTC = formData.ctc * 12;
   const ptHasNoApplicable = formData.pt_state && isNoPTState(formData.pt_state);
 
   const reportingOptions = managers.filter((m: any) => {
@@ -337,7 +481,7 @@ export default function EditEmployeePage() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!hasPermission('edit employees')) return;
+    if (!canEdit) return;
 
     const newErrors: Record<string, string> = {};
     if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
@@ -388,6 +532,18 @@ export default function EditEmployeePage() {
     );
   }
 
+  if (mounted && !canEdit) {
+    return (
+      <div className="text-center py-12">
+        <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-3" />
+        <p className="text-slate-600">Unauthorized access</p>
+        <Link href={`/employees/${employeeId}`} className="inline-flex items-center gap-2 mt-4 text-blue-600 hover:underline">
+          <ArrowLeft size={14} /> Back to Profile
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -418,13 +574,13 @@ export default function EditEmployeePage() {
         <SectionCard title="Personal Information" icon={User}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <FormField label="First Name" required error={errors.first_name}>
-              <Input value={formData.first_name} onChange={(e) => handleChange('first_name', e.target.value)} className="h-9" />
+              <Input value={formData.first_name} onChange={(e) => handleChange('first_name', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Last Name" required error={errors.last_name}>
-              <Input value={formData.last_name} onChange={(e) => handleChange('last_name', e.target.value)} className="h-9" />
+              <Input value={formData.last_name} onChange={(e) => handleChange('last_name', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Email" required error={errors.email}>
-              <Input type="email" value={formData.email} onChange={(e) => handleChange('email', e.target.value)} className="h-9" />
+              <Input type="email" value={formData.email} onChange={(e) => handleChange('email', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Phone">
               <Input value={formData.phone} onChange={(e) => handleChange('phone', e.target.value)} className="h-9" />
@@ -472,23 +628,23 @@ export default function EditEmployeePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <FormField label="PAN Number" required error={errors.pan_number} hint="Format: ABCDE1234F">
               <Input value={formData.pan_number} onChange={(e) => handleChange('pan_number', e.target.value.toUpperCase())}
-                placeholder="ABCDE1234F" className="h-9 uppercase" maxLength={10} />
+                placeholder="ABCDE1234F" className="h-9 uppercase" maxLength={10} disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Aadhaar Number" required error={errors.aadhaar_number} hint="12 digits only">
               <Input value={formData.aadhaar_number} onChange={(e) => handleChange('aadhaar_number', e.target.value.replace(/\D/g, '').slice(0, 12))}
-                placeholder="123456789012" className="h-9" maxLength={12} />
+                placeholder="123456789012" className="h-9" maxLength={12} disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Driving License">
-              <Input value={formData.driving_license} onChange={(e) => handleChange('driving_license', e.target.value)} className="h-9" />
+              <Input value={formData.driving_license} onChange={(e) => handleChange('driving_license', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Passport Number">
-              <Input value={formData.passport_number} onChange={(e) => handleChange('passport_number', e.target.value)} className="h-9" />
+              <Input value={formData.passport_number} onChange={(e) => handleChange('passport_number', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Voter ID">
-              <Input value={formData.voter_id} onChange={(e) => handleChange('voter_id', e.target.value)} className="h-9" />
+              <Input value={formData.voter_id} onChange={(e) => handleChange('voter_id', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="UAN (EPF)">
-              <Input value={formData.uan_number} onChange={(e) => handleChange('uan_number', e.target.value)} className="h-9" />
+              <Input value={formData.uan_number} onChange={(e) => handleChange('uan_number', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
           </div>
         </SectionCard>
@@ -499,7 +655,7 @@ export default function EditEmployeePage() {
             <FormField label="Department" required error={errors.department_id}>
               <select value={formData.department_id}
                 onChange={(e) => { handleChange('department_id', Number(e.target.value)); handleChange('designation_id', ''); }}
-                className={selectCls}>
+                className={selectCls} disabled={isRestrictedSelfEdit}>
                 <option value="">Select Department</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
@@ -507,14 +663,14 @@ export default function EditEmployeePage() {
             <FormField label="Designation" required error={errors.designation_id}>
               <select value={formData.designation_id}
                 onChange={(e) => handleChange('designation_id', Number(e.target.value))}
-                className={selectCls} disabled={!formData.department_id}>
+                className={selectCls} disabled={isRestrictedSelfEdit || !formData.department_id}>
                 <option value="">Select Designation</option>
                 {designations.map((d: any) => <option key={d.id} value={d.id}>{d.title}</option>)}
               </select>
             </FormField>
             <FormField label="Reporting To">
               <div className="space-y-1">
-                {formData.department_id && (
+                {formData.department_id && !isRestrictedSelfEdit && (
                   <div className="flex justify-end">
                     <button type="button" onClick={() => setFilterByDept(p => !p)}
                       className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${
@@ -529,7 +685,7 @@ export default function EditEmployeePage() {
                 )}
                 <select value={formData.reporting_to || ''}
                   onChange={(e) => handleChange('reporting_to', e.target.value ? Number(e.target.value) : '')}
-                  className={selectCls}>
+                  className={selectCls} disabled={isRestrictedSelfEdit}>
                   <option value="">None</option>
                   {reportingOptions.map((m: any) => (
                     <option key={m.id} value={m.id}>
@@ -541,13 +697,13 @@ export default function EditEmployeePage() {
               </div>
             </FormField>
             <FormField label="Joining Date" required error={errors.joining_date}>
-              <Input type="date" value={formData.joining_date} onChange={(e) => handleChange('joining_date', e.target.value)} className="h-9" />
+              <Input type="date" value={formData.joining_date} onChange={(e) => handleChange('joining_date', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Exit Date">
-              <Input type="date" value={formData.exit_date} onChange={(e) => handleChange('exit_date', e.target.value)} className="h-9" />
+              <Input type="date" value={formData.exit_date} onChange={(e) => handleChange('exit_date', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Employment Type">
-              <select value={formData.employment_type} onChange={(e) => handleChange('employment_type', e.target.value)} className={selectCls}>
+              <select value={formData.employment_type} onChange={(e) => handleChange('employment_type', e.target.value)} className={selectCls} disabled={isRestrictedSelfEdit}>
                 <option value="full_time">Full Time</option>
                 <option value="part_time">Part Time</option>
                 <option value="contract">Contract</option>
@@ -555,7 +711,7 @@ export default function EditEmployeePage() {
               </select>
             </FormField>
             <FormField label="Status">
-              <select value={formData.status} onChange={(e) => handleChange('status', e.target.value)} className={selectCls}>
+              <select value={formData.status} onChange={(e) => handleChange('status', e.target.value)} className={selectCls} disabled={isRestrictedSelfEdit}>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="terminated">Terminated</option>
@@ -587,238 +743,267 @@ export default function EditEmployeePage() {
         <SectionCard title="Bank Details" icon={CreditCard}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <FormField label="Bank Name" required error={errors.bank_name}>
-              <Input value={formData.bank_name} onChange={(e) => handleChange('bank_name', e.target.value)} className="h-9" />
+              <Input value={formData.bank_name} onChange={(e) => handleChange('bank_name', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Account Number" required error={errors.bank_account_number}>
-              <Input value={formData.bank_account_number} onChange={(e) => handleChange('bank_account_number', e.target.value)} className="h-9" />
+              <Input value={formData.bank_account_number} onChange={(e) => handleChange('bank_account_number', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="IFSC Code" required error={errors.bank_ifsc}>
               <Input value={formData.bank_ifsc} onChange={(e) => handleChange('bank_ifsc', e.target.value.toUpperCase())}
-                className="h-9 uppercase" placeholder="SBIN0001234" />
+                className="h-9 uppercase" placeholder="SBIN0001234" disabled={isRestrictedSelfEdit} />
             </FormField>
             <FormField label="Branch">
-              <Input value={formData.bank_branch} onChange={(e) => handleChange('bank_branch', e.target.value)} className="h-9" />
+              <Input value={formData.bank_branch} onChange={(e) => handleChange('bank_branch', e.target.value)} className="h-9" disabled={isRestrictedSelfEdit} />
             </FormField>
           </div>
         </SectionCard>
 
-        {/* Salary Structure */}
-        <SectionCard title="Salary Structure" icon={Banknote}>
-          <div className="space-y-4">
+        {!isRestrictedSelfEdit && (
+          <SectionCard title="Salary Structure" icon={Banknote}>
+            <div className="space-y-4">
 
-            {/* Earnings */}
-            <div>
-              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Earnings (Monthly)</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                <FormField label="Basic Salary">
-                  <Input type="number" value={formData.basic_salary || 0} onChange={(e) => handleChange('basic_salary', Number(e.target.value))} className="h-9" min={0} step="0.01" />
-                </FormField>
-                <FormField label={`HRA (%) ${formData.hra > 0 ? `· ${formatCurrency(formData.hra)}` : ''}`}>
+              {/* Annual CTC Input */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 border-b border-slate-100 pb-3">
+                <FormField label="Annual CTC" hint="Enter target annual CTC to auto-fill components">
                   <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
                     <Input
                       type="number"
-                      min="0"
-                      max="100"
-                      placeholder="e.g. 40"
-                      value={hraPercentage || ''}
-                      onChange={(e) => {
-                        const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                        setHraPercentage(val);
-                      }}
-                      className="h-9 pr-7"
+                      placeholder="e.g. 360000"
+                      value={ctcInput}
+                      onFocus={() => setIsCtcFocused(true)}
+                      onBlur={() => setIsCtcFocused(false)}
+                      onChange={(e) => handleAnnualCTCChange(e.target.value)}
+                      className="h-9 pl-7 focus:ring-blue-500/20"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
                   </div>
-                </FormField>
-                <FormField label="Bonus">
-                  <Input type="number" value={formData.bonus || 0} onChange={(e) => handleChange('bonus', Number(e.target.value))} className="h-9" min={0} step="0.01" />
                 </FormField>
               </div>
-              <p className="text-xs text-slate-500 mt-1.5">
-                Gross (before allowances): <span className="font-semibold text-slate-700">{formatCurrency(formData.basic_salary + formData.hra + formData.bonus)}</span>/month
-              </p>
-            </div>
 
-            {/* Allowances — 2 per row grid */}
-            <div>
-              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Allowances</h4>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  {ALLOWANCE_TYPES.map((type, idx) => (
-                    <div
-                      key={type}
-                      className={`flex items-center justify-between px-3 py-2 bg-white
-                        ${idx % 2 === 0 && idx !== ALLOWANCE_TYPES.length - 1 ? 'md:border-r border-slate-100' : ''}
-                        ${idx < ALLOWANCE_TYPES.length - (ALLOWANCE_TYPES.length % 2 === 0 ? 2 : 1) ? 'border-b border-slate-100' : ''}
-                        ${idx === ALLOWANCE_TYPES.length - 1 && ALLOWANCE_TYPES.length % 2 !== 0 ? 'md:col-span-2' : ''}
-                      `}
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`allowance-${type}`}
-                          checked={allowancesState[type]}
-                          onChange={(e) => toggleAllowance(type, e.target.checked)}
-                          className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <label htmlFor={`allowance-${type}`} className="text-sm font-medium text-slate-700 capitalize">
-                          {type} Allowance
-                        </label>
-                      </div>
-                      {allowancesState[type] && (
-                        <Input
-                          type="number"
-                          placeholder="₹ Amount"
-                          value={getAllowanceAmount(type)}
-                          onChange={(e) => updateAllowanceAmount(type, Number(e.target.value))}
-                          className="w-28 h-7 text-sm"
-                          min={0}
-                          step="0.01"
-                        />
-                      )}
-                    </div>
-                  ))}
+              {/* Earnings */}
+              <div>
+                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Earnings (Monthly)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <FormField label={formData.employment_type === 'intern' ? 'Stipend' : 'Basic Salary'}>
+                    <Input type="number" value={formData.basic_salary || 0} onChange={(e) => handleChange('basic_salary', Number(e.target.value))} className="h-9" min={0} step="0.01" />
+                  </FormField>
+                  {showFullStructure && (
+                    <>
+                      <FormField label={`HRA (%) ${formData.hra > 0 ? `· ${formatCurrency(formData.hra)}` : ''}`}>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            placeholder="e.g. 40"
+                            value={hraPercentage || ''}
+                            onChange={(e) => {
+                              const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                              setHraPercentage(val);
+                            }}
+                            className="h-9 pr-7"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                        </div>
+                      </FormField>
+                      <FormField label="Bonus">
+                        <Input type="number" value={formData.bonus || 0} onChange={(e) => handleChange('bonus', Number(e.target.value))} className="h-9" min={0} step="0.01" />
+                      </FormField>
+                    </>
+                  )}
                 </div>
-                {totalAllowances > 0 && (
-                  <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Total Allowances</span>
-                    <span className="text-sm font-semibold text-blue-600">{formatCurrency(totalAllowances)}/month</span>
-                  </div>
+                {showFullStructure && (
+                  <p className="text-xs text-slate-500 mt-1.5">
+                    Gross (before allowances): <span className="font-semibold text-slate-700">{formatCurrency(formData.basic_salary + formData.hra + formData.bonus)}</span>/month
+                  </p>
                 )}
               </div>
-            </div>
 
-            {/* Deductions */}
-            <div>
-              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Deductions (Monthly)</h4>
-              <div className="space-y-2">
-
-                {/* PF row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <FormField label="PF Percentage">
-                    <div className="flex gap-2">
-                      <select value={formData.pf_percentage}
-                        onChange={(e) => handleChange('pf_percentage', Number(e.target.value))}
-                        className="w-20 h-9 border border-slate-300 rounded-lg px-2 text-sm bg-white">
-                        {Array.from({ length: 13 }, (_, i) => <option key={i} value={i}>{i}%</option>)}
-                      </select>
-                      <Input readOnly value={formatCurrency(formData.pf_deduction)} className="h-9 bg-slate-50 flex-1" />
+              {showFullStructure && (
+                <>
+                  {/* Allowances — 2 per row grid */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Allowances</h4>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="grid grid-cols-1 md:grid-cols-2">
+                        {ALLOWANCE_TYPES.map((type, idx) => (
+                          <div
+                            key={type}
+                            className={`flex items-center justify-between px-3 py-2 bg-white
+                              ${idx % 2 === 0 && idx !== ALLOWANCE_TYPES.length - 1 ? 'md:border-r border-slate-100' : ''}
+                              ${idx < ALLOWANCE_TYPES.length - (ALLOWANCE_TYPES.length % 2 === 0 ? 2 : 1) ? 'border-b border-slate-100' : ''}
+                              ${idx === ALLOWANCE_TYPES.length - 1 && ALLOWANCE_TYPES.length % 2 !== 0 ? 'md:col-span-2' : ''}
+                            `}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id={`allowance-${type}`}
+                                checked={allowancesState[type]}
+                                onChange={(e) => toggleAllowance(type, e.target.checked)}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <label htmlFor={`allowance-${type}`} className="text-sm font-medium text-slate-700 capitalize">
+                                {type} Allowance
+                              </label>
+                            </div>
+                            {allowancesState[type] && (
+                              <Input
+                                type="number"
+                                placeholder="₹ Amount"
+                                value={getAllowanceAmount(type)}
+                                onChange={(e) => updateAllowanceAmount(type, Number(e.target.value))}
+                                className="w-28 h-7 text-sm"
+                                min={0}
+                                step="0.01"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {totalAllowances > 0 && (
+                        <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                          <span className="text-sm text-slate-500">Total Allowances</span>
+                          <span className="text-sm font-semibold text-blue-600">{formatCurrency(totalAllowances)}/month</span>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {formData.pf_percentage === 0 ? 'No PF' : `${formData.pf_percentage}% = ${formatCurrency(formData.pf_deduction)}/mo`}
-                    </p>
-                  </FormField>
-                </div>
-
-                {/* ESI Toggle */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-slate-50">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">ESI (Employee State Insurance)</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {!esiApplicable ? 'Not applicable — gross > ₹21,000' : '0.75% employee · 3.25% employer'}
-                      </p>
-                    </div>
-                    <Toggle enabled={esiEnabled} onChange={handleEsiToggle} label="Toggle ESI" />
                   </div>
-                  {esiEnabled && (
-                    <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <FormField label="ESI (Employee)" hint="0.75% of gross">
-                        <Input type="number" value={formData.esi_employee || 0}
-                          onChange={(e) => handleChange('esi_employee', Number(e.target.value))}
-                          className="h-9" min={0} step="0.01" />
-                      </FormField>
-                      <FormField label="ESI (Employer)" hint="3.25% of gross">
-                        <Input type="number" value={formData.esi_employer || 0}
-                          onChange={(e) => handleChange('esi_employer', Number(e.target.value))}
-                          className="h-9" min={0} step="0.01" />
-                      </FormField>
-                    </div>
-                  )}
-                </div>
 
-                {/* PT row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <FormField label="PT State">
-                    <select value={formData.pt_state} onChange={(e) => handleChange('pt_state', e.target.value)}
-                      className={`w-full h-9 border rounded-lg px-3 text-sm bg-white ${ptHasNoApplicable ? 'border-red-300 bg-red-50' : 'border-slate-300'}`}>
-                      <option value="">Select state for PT</option>
-                      {PT_STATES.map(s => <option key={s} value={s}>{s}{isNoPTState(s) ? ' (No PT)' : ''}</option>)}
-                    </select>
-                    {ptHasNoApplicable && <p className="text-xs text-red-500 mt-0.5">⚠️ No PT in {formData.pt_state}</p>}
-                    {formData.pt_state && !ptHasNoApplicable && formData.pt_amount === 0 && (
-                      <p className="text-xs text-slate-500 mt-0.5">Below PT threshold</p>
-                    )}
-                  </FormField>
-                  <FormField label="PT Amount">
-                    <Input type="number" value={formData.pt_amount || 0}
-                      onChange={(e) => handleChange('pt_amount', Number(e.target.value))}
-                      className="h-9" min={0} step="0.01" />
-                  </FormField>
-                </div>
+                  {/* Deductions */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Deductions (Monthly)</h4>
+                    <div className="space-y-2">
 
-                {/* TDS Toggle */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-slate-50">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">TDS (Tax Deducted at Source)</p>
-                      <p className="text-xs text-slate-500 mt-0.5">Monthly income tax deduction</p>
+                      {/* PF row */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <FormField label="PF Percentage">
+                          <div className="flex gap-2">
+                            <select value={formData.pf_percentage}
+                              onChange={(e) => handleChange('pf_percentage', Number(e.target.value))}
+                              className="w-20 h-9 border border-slate-300 rounded-lg px-2 text-sm bg-white">
+                              {Array.from({ length: 13 }, (_, i) => <option key={i} value={i}>{i}%</option>)}
+                            </select>
+                            <Input readOnly value={formatCurrency(formData.pf_deduction)} className="h-9 bg-slate-50 flex-1" />
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {formData.pf_percentage === 0 ? 'No PF' : `${formData.pf_percentage}% = ${formatCurrency(formData.pf_deduction)}/mo`}
+                          </p>
+                        </FormField>
+                      </div>
+
+                      {/* ESI Toggle */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-slate-50">
+                          <div>
+                            <p className="text-sm font-medium text-slate-700">ESI (Employee State Insurance)</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {!esiApplicable ? 'Not applicable — gross > ₹21,000' : '0.75% employee · 3.25% employer'}
+                            </p>
+                          </div>
+                          <Toggle enabled={esiEnabled} onChange={handleEsiToggle} label="Toggle ESI" />
+                        </div>
+                        {esiEnabled && (
+                          <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <FormField label="ESI (Employee)" hint="0.75% of gross">
+                              <Input type="number" value={formData.esi_employee || 0}
+                                onChange={(e) => handleChange('esi_employee', Number(e.target.value))}
+                                className="h-9" min={0} step="0.01" />
+                            </FormField>
+                            <FormField label="ESI (Employer)" hint="3.25% of gross">
+                              <Input type="number" value={formData.esi_employer || 0}
+                                onChange={(e) => handleChange('esi_employer', Number(e.target.value))}
+                                className="h-9" min={0} step="0.01" />
+                            </FormField>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* PT row */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <FormField label="PT State">
+                          <select value={formData.pt_state} onChange={(e) => handleChange('pt_state', e.target.value)}
+                            className={`w-full h-9 border rounded-lg px-3 text-sm bg-white ${ptHasNoApplicable ? 'border-red-300 bg-red-50' : 'border-slate-300'}`}>
+                            <option value="">Select state for PT</option>
+                            {PT_STATES.map(s => <option key={s} value={s}>{s}{isNoPTState(s) ? ' (No PT)' : ''}</option>)}
+                          </select>
+                          {ptHasNoApplicable && <p className="text-xs text-red-500 mt-0.5">⚠️ No PT in {formData.pt_state}</p>}
+                          {formData.pt_state && !ptHasNoApplicable && formData.pt_amount === 0 && (
+                            <p className="text-xs text-slate-500 mt-0.5">Below PT threshold</p>
+                          )}
+                        </FormField>
+                        <FormField label="PT Amount">
+                          <Input type="number" value={formData.pt_amount || 0}
+                            onChange={(e) => handleChange('pt_amount', Number(e.target.value))}
+                            className="h-9" min={0} step="0.01" />
+                        </FormField>
+                      </div>
+
+                      {/* TDS Toggle */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-slate-50">
+                          <div>
+                            <p className="text-sm font-medium text-slate-700">TDS (Tax Deducted at Source)</p>
+                            <p className="text-xs text-slate-500 mt-0.5">Monthly income tax deduction</p>
+                          </div>
+                          <Toggle enabled={tdsEnabled} onChange={handleTdsToggle} label="Toggle TDS" />
+                        </div>
+                        {tdsEnabled && (
+                          <div className="p-3">
+                            <FormField label="TDS Amount (Monthly)" hint="Monthly TDS deduction">
+                              <Input type="number" value={formData.tds_amount || 0}
+                                onChange={(e) => handleChange('tds_amount', Number(e.target.value))}
+                                className="h-9 max-w-xs" min={0} step="0.01" />
+                            </FormField>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Other Deductions */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <FormField label="Other Deductions">
+                          <Input type="number" value={formData.other_deductions || 0}
+                            onChange={(e) => handleChange('other_deductions', Number(e.target.value))}
+                            className="h-9" min={0} step="0.01" />
+                        </FormField>
+                      </div>
+
                     </div>
-                    <Toggle enabled={tdsEnabled} onChange={handleTdsToggle} label="Toggle TDS" />
                   </div>
-                  {tdsEnabled && (
-                    <div className="p-3">
-                      <FormField label="TDS Amount (Monthly)" hint="Monthly TDS deduction">
-                        <Input type="number" value={formData.tds_amount || 0}
-                          onChange={(e) => handleChange('tds_amount', Number(e.target.value))}
-                          className="h-9 max-w-xs" min={0} step="0.01" />
-                      </FormField>
-                    </div>
-                  )}
-                </div>
-
-                {/* Other Deductions */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <FormField label="Other Deductions">
-                    <Input type="number" value={formData.other_deductions || 0}
-                      onChange={(e) => handleChange('other_deductions', Number(e.target.value))}
-                      className="h-9" min={0} step="0.01" />
-                  </FormField>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Salary Summary */}
-            <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 border border-slate-200">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-600">Gross Salary</span>
-                <span className="font-semibold text-slate-800">{formatCurrency(grossSalary)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-600">Total Deductions</span>
-                <span className="font-semibold text-red-600">− {formatCurrency(totalDeductions)}</span>
-              </div>
-              <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center">
-                <span className="font-bold text-slate-800">Net Salary</span>
-                <span className="font-bold text-slate-800">{formatCurrency(netSalary)}</span>
-              </div>
-              {totalDeductions > 0 && (
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {formData.pf_deduction > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">PF ({formData.pf_percentage}%): {formatCurrency(formData.pf_deduction)}</span>}
-                  {esiEnabled && formData.esi_employee > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">ESI: {formatCurrency(formData.esi_employee)}</span>}
-                  {formData.pt_amount > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">PT: {formatCurrency(formData.pt_amount)}</span>}
-                  {tdsEnabled && formData.tds_amount > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">TDS: {formatCurrency(formData.tds_amount)}</span>}
-                  {formData.other_deductions > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">Other: {formatCurrency(formData.other_deductions)}</span>}
-                </div>
+                </>
               )}
-              <div className="text-xs text-slate-500 pt-0.5">
-                Annual CTC: <span className="font-medium text-slate-700">{formatCurrency(annualCTC)}</span>
-              </div>
-            </div>
 
-          </div>
-        </SectionCard>
+              {/* Salary Summary */}
+              <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 border border-slate-200">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600">Gross Salary</span>
+                  <span className="font-semibold text-slate-800">{formatCurrency(grossSalary)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600">Total Deductions</span>
+                  <span className="font-semibold text-red-600">− {formatCurrency(totalDeductions)}</span>
+                </div>
+                <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center">
+                  <span className="font-bold text-slate-800">Net Salary</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(netSalary)}</span>
+                </div>
+                {totalDeductions > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {formData.pf_deduction > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">PF ({formData.pf_percentage}%): {formatCurrency(formData.pf_deduction)}</span>}
+                    {esiEnabled && formData.esi_employee > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">ESI: {formatCurrency(formData.esi_employee)}</span>}
+                    {formData.pt_amount > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">PT: {formatCurrency(formData.pt_amount)}</span>}
+                    {tdsEnabled && formData.tds_amount > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">TDS: {formatCurrency(formData.tds_amount)}</span>}
+                    {formData.other_deductions > 0 && <span className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5">Other: {formatCurrency(formData.other_deductions)}</span>}
+                  </div>
+                )}
+                <div className="text-xs text-slate-500 pt-0.5">
+                  Annual CTC: <span className="font-medium text-slate-700">{formatCurrency(annualCTC)}</span>
+                </div>
+              </div>
+
+            </div>
+          </SectionCard>
+        )}
 
         {/* Footer */}
         <div className="flex justify-end gap-2 pt-1 border-t border-slate-200">

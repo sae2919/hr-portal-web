@@ -110,7 +110,9 @@ export default function MyChainPage() {
                     </div>
                   </div>
                   {index === 0 && (
-                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Direct Manager</span>
+                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                      {manager.position_level === 'team_lead' ? 'Direct Team Lead' : 'Direct Manager'}
+                    </span>
                   )}
                 </div>
                 {index < chain.length - 1 && (

@@ -113,7 +113,7 @@ export default function ReportingChain() {
                   </div>
                   {index === 0 && (
                     <span className="text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
-                      Direct Manager
+                      {manager.position_level === 'team_lead' ? 'Direct Team Lead' : 'Direct Manager'}
                     </span>
                   )}
                 </div>
