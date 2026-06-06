@@ -15,6 +15,7 @@ import {
   Briefcase, CreditCard, Banknote, Heart, FileBadge,
   ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const PT_SLABS: Record<string, { upTo: number; pt: number }[]> = {
   'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
@@ -113,7 +114,7 @@ function FormField({ label, required, error, children, hint }: {
   );
 }
 
-const ALLOWANCE_TYPES = ['transport', 'food', 'medical', 'special', 'other'] as const;
+const ALLOWANCE_TYPES = ['transport', 'food', 'medical', 'other'] as const;
 
 export default function EditEmployeePage() {
   const router = useRouter();
@@ -250,10 +251,27 @@ export default function EditEmployeePage() {
     });
   }, [employee]);
 
-  useEffect(() => {
-    const calculatedHra = Math.round((formData.basic_salary * hraPercentage) / 100);
-    setFormData(prev => ({ ...prev, hra: calculatedHra }));
-  }, [formData.basic_salary, hraPercentage]);
+  const handleHraAmountChange = (valStr: string) => {
+    const val = Number(valStr) || 0;
+    setFormData(prev => {
+      if (prev.basic_salary > 0) {
+        const pct = Math.round((val / prev.basic_salary) * 100);
+        setHraPercentage(pct);
+      }
+      return { ...prev, hra: val };
+    });
+  };
+
+  const handleSpecialAllowanceChange = (valStr: string) => {
+    const val = Number(valStr) || 0;
+    setFormData(prev => {
+      const exists = prev.allowances.find((a: any) => a.type === 'special');
+      const newAllowances = exists
+        ? prev.allowances.map((a: any) => a.type === 'special' ? { ...a, amount: val } : a)
+        : [...prev.allowances, { type: 'special', amount: val }];
+      return { ...prev, allowances: newAllowances };
+    });
+  };
 
   const toggleAllowance = (type: string, enabled: boolean) => {
     setAllowancesState(prev => ({ ...prev, [type]: enabled }));
@@ -475,7 +493,13 @@ export default function EditEmployeePage() {
   });
 
   const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === 'basic_salary') {
+      const basicVal = Number(value) || 0;
+      const calculatedHra = Math.round((basicVal * hraPercentage) / 100);
+      setFormData(prev => ({ ...prev, basic_salary: basicVal, hra: calculatedHra }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
     if (errors[field]) setErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
   };
 
@@ -653,20 +677,39 @@ export default function EditEmployeePage() {
         <SectionCard title="Employment Details" icon={Briefcase}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <FormField label="Department" required error={errors.department_id}>
-              <select value={formData.department_id}
-                onChange={(e) => { handleChange('department_id', Number(e.target.value)); handleChange('designation_id', ''); }}
-                className={selectCls} disabled={isRestrictedSelfEdit}>
-                <option value="">Select Department</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              <SearchableSelect
+                options={[
+                  { id: '' as any, label: 'Select Department' },
+                  ...departments.map(d => ({
+                    id: d.id,
+                    label: d.name
+                  }))
+                ]}
+                value={formData.department_id || ''}
+                onChange={(val) => {
+                  handleChange('department_id', val === '' ? '' : Number(val));
+                  handleChange('designation_id', '');
+                }}
+                placeholder="Select Department"
+                disabled={isRestrictedSelfEdit}
+              />
             </FormField>
             <FormField label="Designation" required error={errors.designation_id}>
-              <select value={formData.designation_id}
-                onChange={(e) => handleChange('designation_id', Number(e.target.value))}
-                className={selectCls} disabled={isRestrictedSelfEdit || !formData.department_id}>
-                <option value="">Select Designation</option>
-                {designations.map((d: any) => <option key={d.id} value={d.id}>{d.title}</option>)}
-              </select>
+              <SearchableSelect
+                options={[
+                  { id: '' as any, label: formData.department_id ? 'Select Designation' : 'Select department first' },
+                  ...designations.map((d: any) => ({
+                    id: d.id,
+                    label: d.title
+                  }))
+                ]}
+                value={formData.designation_id || ''}
+                onChange={(val) => {
+                  handleChange('designation_id', val === '' ? '' : Number(val));
+                }}
+                placeholder={formData.department_id ? 'Select Designation' : 'Select department first'}
+                disabled={isRestrictedSelfEdit || !formData.department_id}
+              />
             </FormField>
             <FormField label="Reporting To">
               <div className="space-y-1">
@@ -683,17 +726,21 @@ export default function EditEmployeePage() {
                     </button>
                   </div>
                 )}
-                <select value={formData.reporting_to || ''}
-                  onChange={(e) => handleChange('reporting_to', e.target.value ? Number(e.target.value) : '')}
-                  className={selectCls} disabled={isRestrictedSelfEdit}>
-                  <option value="">None</option>
-                  {reportingOptions.map((m: any) => (
-                    <option key={m.id} value={m.id}>
-                      {m.full_name}{m.designation?.title ? ` · ${m.designation.title}` : ''}
-                      {!filterByDept && m.department?.name ? ` (${m.department.name})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  options={[
+                    { id: '' as any, label: 'None' },
+                    ...reportingOptions.map((m: any) => ({
+                      id: m.id,
+                      label: m.full_name,
+                      sublabel: (m.designation?.title ? m.designation.title : '') + 
+                                (!filterByDept && m.department?.name ? ` (${m.department.name})` : '')
+                    }))
+                  ]}
+                  value={formData.reporting_to || ''}
+                  onChange={(val) => handleChange('reporting_to', val === '' ? '' : Number(val))}
+                  placeholder="Select reporting manager"
+                  disabled={isRestrictedSelfEdit}
+                />
               </div>
             </FormField>
             <FormField label="Joining Date" required error={errors.joining_date}>
@@ -789,21 +836,30 @@ export default function EditEmployeePage() {
                   </FormField>
                   {showFullStructure && (
                     <>
-                      <FormField label={`HRA (%) ${formData.hra > 0 ? `· ${formatCurrency(formData.hra)}` : ''}`}>
+                      <FormField label={`HRA (${hraPercentage}%)`}>
                         <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
                           <Input
                             type="number"
                             min="0"
-                            max="100"
-                            placeholder="e.g. 40"
-                            value={hraPercentage || ''}
-                            onChange={(e) => {
-                              const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                              setHraPercentage(val);
-                            }}
-                            className="h-9 pr-7"
+                            placeholder="0"
+                            value={formData.hra || ''}
+                            onChange={(e) => handleHraAmountChange(e.target.value)}
+                            className="h-9 pl-7"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                        </div>
+                      </FormField>
+                      <FormField label="Special Allowance">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={formData.allowances.find((a: any) => a.type === 'special')?.amount || ''}
+                            onChange={(e) => handleSpecialAllowanceChange(e.target.value)}
+                            className="h-9 pl-7"
+                          />
                         </div>
                       </FormField>
                       <FormField label="Bonus">

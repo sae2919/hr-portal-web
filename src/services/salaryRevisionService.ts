@@ -10,7 +10,8 @@ export interface SalaryRevision {
     last_name: string;
     full_name?: string;
     department?: { name: string } | string;
-    designation?: { name: string } | string;
+    designation?: { title: string } | string;
+    employment_type?: string;
   } | null;
   old_basic_salary: number;
   old_hra: number;
@@ -27,6 +28,12 @@ export interface SalaryRevision {
   increment_percentage: number;
   effective_date: string;
   reason: string;
+  new_employment_type?: string | null;
+  old_employment_type?: string | null;
+  old_designation_id?: number | null;
+  new_designation_id?: number | null;
+  old_designation?: { id: number; title: string } | null;
+  new_designation?: { id: number; title: string } | null;
   approved_by?: number;
   approver?: {
     id: number;
@@ -49,6 +56,8 @@ export const salaryRevisionService = {
     new_bonus: number;
     effective_date: string;
     reason: string;
+    new_employment_type?: string;
+    new_designation_id?: number;
   }) => {
     const response = await api.post('/salary-revisions', data);
     return response.data;
@@ -70,6 +79,24 @@ export const salaryRevisionService = {
     
     // Clean up
     document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+  },
+
+  updateRevision: async (id: number, data: {
+    new_basic_salary: number;
+    new_hra: number;
+    new_allowances: number;
+    new_bonus: number;
+    effective_date: string;
+    reason: string;
+    new_employment_type?: string;
+    new_designation_id?: number;
+  }) => {
+    const response = await api.put(`/salary-revisions/${id}`, data);
+    return response.data;
+  },
+
+  deleteRevision: async (id: number) => {
+    const response = await api.delete(`/salary-revisions/${id}`);
+    return response.data;
   }
 };

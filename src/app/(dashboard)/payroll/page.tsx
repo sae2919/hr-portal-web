@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface UserProfile { id: number; name: string; email: string; role: string; }
@@ -221,27 +222,29 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
     w.document.write(`<!DOCTYPE html><html><head><title>Payslip</title>
       <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 24px; }
-        .header { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 10px; }
-        .logo { width: 44px; height: 44px; object-fit: contain; }
-        .header-text { text-align: left; }
-        .header h1 { font-size: 16px; font-weight: bold; margin: 0; }
-        .header p { font-size: 10px; color: #444; margin-top: 2px; }
-        .title { text-align: center; font-size: 13px; font-weight: bold; margin: 10px 0; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #999; margin-bottom: 14px; }
-        .info-col { padding: 8px 12px; }
-        .info-col + .info-col { border-left: 1px solid #999; }
+        body { font-family: 'Times New Roman', Times, Georgia, serif; font-size: 11px; color: #111; padding: 24px; }
+        .header-table { width: 100%; border-collapse: collapse; border: none; margin-bottom: 5px; }
+        .header-table td { border: none; padding: 0; }
+        .logo-cell { width: 15%; vertical-align: middle; }
+        .logo { max-height: 45px; max-width: 120px; object-fit: contain; }
+        .company-details-cell { width: 85%; text-align: center; vertical-align: middle; }
+        .company-name { font-size: 16px; font-weight: bold; margin: 0 0 3px 0; color: #000; }
+        .company-address { font-size: 9px; color: #333; margin: 0; line-height: 1.2; }
+        .title { text-align: center; font-size: 13px; font-weight: bold; margin: 15px 0 10px 0; }
+        .info-grid { border: 1px solid #777; margin-bottom: 14px; }
+        .info-col { padding: 5px 8px; }
+        .info-col + .info-col { border-left: 1px solid #777; }
         .info-row { display: flex; gap: 8px; margin-bottom: 4px; }
         .info-label { color: #444; min-width: 120px; }
         .info-value { font-weight: 500; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th { background: #f0f0f0; border: 1px solid #999; padding: 5px 8px; text-align: left; font-size: 10px; }
-        td { border: 1px solid #ccc; padding: 5px 8px; }
+        th { background: #fff; border: 1px solid #777; padding: 5px 8px; text-align: center; font-size: 10px; font-weight: bold; }
+        td { border: 1px solid #777; padding: 4px 8px; font-size: 10px; }
         td.num { text-align: right; }
-        .total-row td { font-weight: bold; background: #f8f8f8; }
-        .net-pay { font-size: 13px; font-weight: bold; margin: 8px 0 4px; }
-        .words { font-style: italic; font-size: 11px; margin-bottom: 16px; border-bottom: 1px solid #999; padding-bottom: 8px; }
-        .footer { text-align: center; font-size: 9px; color: #666; margin-top: 24px; }
+        .total-row td { font-weight: bold; background: #fff; }
+        .net-pay { font-size: 11px; font-weight: bold; margin: 15px 0 4px; }
+        .words { font-weight: bold; font-style: italic; font-size: 11px; margin-bottom: 16px; border-bottom: 1px solid #777; padding-bottom: 8px; }
+        .footer { text-align: center; font-size: 9px; color: #777; margin-top: 25px; border-top: none; }
         .print-date { font-size: 9px; color: #666; margin-top: 4px; }
       </style></head><body>${el.innerHTML}</body></html>`);
     w.document.close();
@@ -265,58 +268,118 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
             </button>
           </div>
         </div>
-        <div id="payslip-print-area" className="p-6 text-[11px] text-gray-800 font-[Arial,sans-serif]">
-          <div className="header border-b-2 border-gray-900 pb-3 mb-4 flex items-center justify-center gap-3">
-            <img src={`${typeof window !== 'undefined' ? window.location.origin : ''}/logo.png`} alt="Logo" className="w-11 h-11 object-contain logo" />
-            <div className="header-text text-left">
-              <h1 className="text-base font-bold">{companyName || 'Techsprout AI Labs'}</h1>
-              <p className="text-[10px] text-gray-500 mt-0.5">
-                8-2-293/82/A/787/1/4F/1, Road No36, 4th Floor, Jubilee Hills, Hyderabad, Shaikpet, Telangana, India, 500033
-              </p>
-            </div>
-          </div>
+        <div id="payslip-print-area" className="p-6 text-[11px] text-gray-800 leading-relaxed" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
+          
+          {/* Header Layout Table */}
+          <table className="w-full border-collapse mb-1">
+            <tbody>
+              <tr>
+                <td className="w-[15%] align-middle border-none p-0">
+                  <img src={`${typeof window !== 'undefined' ? window.location.origin : ''}/logo.png`} alt="Logo" className="max-h-[45px] max-w-[120px] object-contain logo" />
+                </td>
+                <td className="w-[70%] text-center align-middle border-none p-0">
+                  <h1 className="company-name text-base font-bold m-0" style={{ fontSize: '16px', margin: '0 0 3px 0' }}>
+                    {companyName || 'Techsprout AI Labs'}
+                  </h1>
+                  <p className="company-address text-[9px] text-gray-600 m-0" style={{ fontSize: '9px', lineHeight: '1.2' }}>
+                    8-2-293/82/A/787/1/4F/1, Road No36, 4th Floor, Jubilee Hills, Hyderabad, Shaikpet, Telangana, India, 500033
+                  </p>
+                </td>
+                <td className="w-[15%] border-none p-0"></td>
+              </tr>
+            </tbody>
+          </table>
+
           <div className="title text-center font-bold text-sm mb-3">
             Payslip for the month of {monthName} {payroll.year}
           </div>
-          <div className="info-grid grid grid-cols-2 border border-gray-400 mb-4 text-[10.5px]">
-            <div className="info-col p-2 space-y-1">
-              {[
-                ['Name:', `${payroll.employee.first_name} ${payroll.employee.last_name}`],
-                ['Joining Date:', payroll.employee.joining_date ? new Date(payroll.employee.joining_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
-                ['Designation:', payroll.employee.designation?.title ?? payroll.employee.designation?.name ?? '—'],
-                ['Department:', payroll.employee.department?.name ?? '—'],
-                ['Location:', 'Hyderabad'],
-              ].map(([l, v]) => (
-                <div key={l} className="info-row flex gap-2">
-                  <span className="info-label text-gray-500 w-28 flex-shrink-0">{l}</span>
-                  <span className="info-value font-medium">{v}</span>
-                </div>
-              ))}
-            </div>
-            <div className="info-col p-2 border-l border-gray-400 space-y-1">
-              {[
-                ['Employee ID:', payroll.employee.employee_id ?? String(payroll.employee.id)],
-                ['Bank Name:', payroll.employee.bank_name ?? '—'],
-                ['Bank Account No:', payroll.employee.bank_account_number ?? '—'],
-                ['PAN Number:', payroll.employee.pan_number ?? '—'],
-                ['Effective Work Days:', String(payroll.present_days)],
-                ['LOP:', String(payroll.lop_days)],
-              ].map(([l, v]) => (
-                <div key={l} className="info-row flex gap-2">
-                  <span className="info-label text-gray-500 w-36 flex-shrink-0">{l}</span>
-                  <span className="info-value font-medium">{v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          
+          {/* Employee Details Matrix using standard nested tables to match PDF */}
+          <table className="w-full border-collapse mb-4 text-[10.5px]" style={{ border: '1px solid #777' }}>
+            <tbody>
+              <tr>
+                <td className="w-1/2 p-2 border-r border-gray-400 align-top" style={{ padding: '5px 8px' }}>
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      <tr>
+                        <td className="w-[35%] py-0.5 border-none font-normal text-gray-500">Name:</td>
+                        <td className="w-[65%] py-0.5 border-none font-normal">{payroll.employee.first_name} {payroll.employee.last_name}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Joining Date:</td>
+                        <td className="py-0.5 border-none font-normal">
+                          {payroll.employee.joining_date ? new Date(payroll.employee.joining_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Designation:</td>
+                        <td className="py-0.5 border-none font-normal">{payroll.employee.designation?.title ?? payroll.employee.designation?.name ?? '—'}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Department:</td>
+                        <td className="py-0.5 border-none font-normal">{payroll.employee.department?.name ?? '—'}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Location:</td>
+                        <td className="py-0.5 border-none font-normal">Hyderabad</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+                <td className="w-1/2 p-2 align-top" style={{ padding: '5px 8px' }}>
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      <tr>
+                        <td className="w-[45%] py-0.5 border-none font-normal text-gray-500">Employee ID:</td>
+                        <td className="py-0.5 border-none font-normal">{payroll.employee.employee_id || String(payroll.employee.id)}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Bank Name:</td>
+                        <td className="py-0.5 border-none font-normal">{payroll.employee.bank_name ?? '—'}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Bank Account No:</td>
+                        <td className="py-0.5 border-none font-normal">
+                          {payroll.employee.bank_account_number 
+                            ? (payroll.employee.bank_account_number.length > 4 
+                               ? 'x'.repeat(payroll.employee.bank_account_number.length - 4) + payroll.employee.bank_account_number.slice(-4) 
+                               : payroll.employee.bank_account_number)
+                            : '—'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">PAN Number:</td>
+                        <td className="py-0.5 border-none font-normal">
+                          {payroll.employee.pan_number 
+                            ? (payroll.employee.pan_number.length > 4 
+                               ? 'x'.repeat(payroll.employee.pan_number.length - 4) + payroll.employee.pan_number.slice(-4) 
+                               : payroll.employee.pan_number)
+                            : '—'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">Effective Work Days:</td>
+                        <td className="py-0.5 border-none font-normal">{payroll.present_days}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5 border-none font-normal text-gray-500">LOP:</td>
+                        <td className="py-0.5 border-none font-normal">{payroll.lop_days}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
           <table className="w-full border-collapse mb-3 text-[10.5px]">
             <thead>
               <tr>
-                <th className="border border-gray-400 bg-gray-100 px-2 py-1 text-left">Earnings</th>
-                <th className="border border-gray-400 bg-gray-100 px-2 py-1 text-right">Master</th>
-                <th className="border border-gray-400 bg-gray-100 px-2 py-1 text-right">Actual</th>
-                <th className="border border-gray-400 bg-gray-100 px-2 py-1 text-left">Deductions</th>
-                <th className="border border-gray-400 bg-gray-100 px-2 py-1 text-right">Actual</th>
+                <th className="border border-gray-400 bg-white px-2 py-1 text-center font-bold">Earnings</th>
+                <th className="border border-gray-400 bg-white px-2 py-1 text-center font-bold">Master</th>
+                <th className="border border-gray-400 bg-white px-2 py-1 text-center font-bold">Actual</th>
+                <th className="border border-gray-400 bg-white px-2 py-1 text-center font-bold">Deductions</th>
+                <th className="border border-gray-400 bg-white px-2 py-1 text-center font-bold">Actual</th>
               </tr>
             </thead>
             <tbody>
@@ -325,28 +388,29 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
                 const ded  = rightRows[i];
                 return (
                   <tr key={i}>
-                    <td className="border border-gray-300 px-2 py-1">{earn?.label ?? ''}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{earn?.master !== null ? fmt(earn.master) : ''}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{earn?.actual !== null ? fmt(earn.actual) : ''}</td>
-                    <td className="border border-gray-300 px-2 py-1">{ded?.label ?? ''}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{ded?.actual !== null ? fmt(ded.actual) : ''}</td>
+                    <td className="border border-gray-400 px-2 py-1">{earn?.label ?? ''}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">{earn?.master !== null ? fmt(earn.master) : ''}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">{earn?.actual !== null ? fmt(earn.actual) : ''}</td>
+                    <td className="border border-gray-400 px-2 py-1">{ded?.label ?? ''}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">{ded?.actual !== null ? fmt(ded.actual) : ''}</td>
                   </tr>
                 );
               })}
-              <tr className="font-bold bg-gray-50">
-                <td className="border border-gray-400 px-2 py-1">Total Earnings: INR.</td>
+              <tr className="font-bold bg-white">
+                <td className="border border-gray-400 px-2 py-1">Total Earnings:INR.:</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(masterGross)}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.gross_salary)}</td>
-                <td className="border border-gray-400 px-2 py-1">Total Deductions: INR.</td>
+                <td className="border border-gray-400 px-2 py-1">Total Deductions:INR.</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.total_deductions)}</td>
               </tr>
             </tbody>
           </table>
-          <div className="net-pay flex items-baseline gap-2 mt-2">
-            <span className="font-bold text-sm">Net Pay for the month</span>
-            <span className="font-bold text-sm">₹{fmt(payroll.net_salary)}</span>
+          
+          <div className="net-pay flex items-baseline gap-2 mt-2 font-bold text-sm">
+            <span>Net Pay for the month</span>
+            <span>{fmt(payroll.net_salary)}</span>
           </div>
-          <div className="words italic text-[10.5px] border-b border-gray-400 pb-3 mb-4">
+          <div className="words font-bold italic text-[10.5px] border-b border-gray-400 pb-3 mb-4">
             ({amountInWords(net)})
           </div>
           <div className="footer text-center text-[9px] text-gray-500">
@@ -425,7 +489,7 @@ function ExpandedRow({ payroll, isAdmin, emailingId, deletingId,
                 <CreditCard size={12} /> Mark Paid
               </button>
             )}
-            {isAdmin && (
+            {isAdmin && payroll.status === 'paid' && (
               <button onClick={() => onEmail(payroll.id)} disabled={emailingId === payroll.id}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-60 shadow-sm">
                 {emailingId === payroll.id ? <Loader2 size={12} className="animate-spin" /> : <><Mail size={12} /> Email</>}
@@ -497,12 +561,13 @@ function ExpandedRow({ payroll, isAdmin, emailingId, deletingId,
 }
 
 // ─── Bulk Action Bar ──────────────────────────────────────────────────────────
-function BulkActionBar({ selectedIds, onMarkPaid, onSendEmail, onClear, loading }: {
+function BulkActionBar({ selectedIds, onMarkPaid, onSendEmail, onClear, loading, allSelectedArePaid }: {
   selectedIds: number[];
   onMarkPaid: () => void;
   onSendEmail: () => void;
   onClear: () => void;
   loading: 'paid' | 'email' | null;
+  allSelectedArePaid: boolean;
 }) {
   if (selectedIds.length === 0) return null;
   return (
@@ -514,9 +579,11 @@ function BulkActionBar({ selectedIds, onMarkPaid, onSendEmail, onClear, loading 
       <button onClick={onMarkPaid} disabled={!!loading} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-white text-blue-700 font-semibold hover:bg-blue-50 transition disabled:opacity-60 text-xs">
         {loading === 'paid' ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />} Mark All Paid
       </button>
-      <button onClick={onSendEmail} disabled={!!loading} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400 transition disabled:opacity-60 text-xs">
-        {loading === 'email' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Email All
-      </button>
+      {allSelectedArePaid && (
+        <button onClick={onSendEmail} disabled={!!loading} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400 transition disabled:opacity-60 text-xs">
+          {loading === 'email' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Email All
+        </button>
+      )}
       <button onClick={onClear} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition"><X size={14} /></button>
     </div>
   );
@@ -556,36 +623,37 @@ function UniversalFilterBar({ filters, employees, departments, isAdmin, onFilter
           {/* Employee Filter - Admin Only */}
           {isAdmin && (
             <div className="relative min-w-[200px]">
-              <select 
-                value={filters.employee_id}
-                onChange={(e) => onFilterChange('employee_id', e.target.value)}
-                className="appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 pr-9 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer w-full"
-              >
-                <option value="">All Employees</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.first_name} {emp.last_name} {emp.department?.name ? `(${emp.department.name})` : ''}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <SearchableSelect
+                options={[
+                  { id: '', label: 'All Employees' },
+                  ...employees.map(emp => ({
+                    id: emp.id,
+                    label: `${emp.first_name} ${emp.last_name}`,
+                    sublabel: emp.department?.name ? emp.department.name : undefined
+                  }))
+                ]}
+                value={filters.employee_id === '' ? '' : Number(filters.employee_id)}
+                onChange={(val) => onFilterChange('employee_id', val === '' ? '' : String(val))}
+                placeholder="All Employees"
+              />
             </div>
           )}
 
           {/* Department Filter - Admin Only */}
           {isAdmin && (
             <div className="relative min-w-[160px]">
-              <select 
-                value={filters.department_id}
-                onChange={(e) => onFilterChange('department_id', e.target.value)}
-                className="appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 pr-9 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 cursor-pointer w-full"
-              >
-                <option value="">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <SearchableSelect
+                options={[
+                  { id: '', label: 'All Departments' },
+                  ...departments.map(dept => ({
+                    id: dept.id,
+                    label: dept.name
+                  }))
+                ]}
+                value={filters.department_id === '' ? '' : Number(filters.department_id)}
+                onChange={(val) => onFilterChange('department_id', val === '' ? '' : String(val))}
+                placeholder="All Departments"
+              />
             </div>
           )}
 
@@ -732,6 +800,15 @@ export default function PayrollPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkLoading, setBulkLoading] = useState<'paid' | 'email' | null>(null);
 
+  // Check if all selected payrolls are marked as paid
+  const allSelectedArePaid = useMemo(() => {
+    if (selectedIds.length === 0) return false;
+    return selectedIds.every(id => {
+      const p = payrolls.find(pay => pay.id === id);
+      return p ? p.status === 'paid' : false;
+    });
+  }, [selectedIds, payrolls]);
+
   // Generate modal
   const [showGenModal, setShowGenModal] = useState(false);
   const [loadingEmps, setLoadingEmps] = useState(false);
@@ -752,7 +829,7 @@ export default function PayrollPage() {
       return;
     }
 
-    const selectedEmp = employees.find(e => e.id === genForm.employee_id);
+    const selectedEmp = employees.find(e => e.id === (genForm.employee_id as any));
     if (selectedEmp) {
       const defaultState = selectedEmp.pt_state || '';
       setSelectedPtState(defaultState);
@@ -789,7 +866,7 @@ export default function PayrollPage() {
       return;
     }
 
-    const selectedEmp = employees.find(e => e.id === genForm.employee_id);
+    const selectedEmp = employees.find(e => e.id === (genForm.employee_id as any));
     if (selectedEmp) {
       const basic = Number(selectedEmp.basic_salary) || 0;
       const hra = Number(selectedEmp.hra) || 0;
@@ -819,7 +896,7 @@ export default function PayrollPage() {
       const nextInclude = !f.include_pt;
       let nextAmount = 0;
       if (nextInclude && f.employee_id) {
-        const selectedEmp = employees.find(e => e.id === f.employee_id);
+        const selectedEmp = employees.find(e => e.id === (f.employee_id as any));
         if (selectedEmp) {
           const stateToUse = selectedPtState || selectedEmp.pt_state || '';
           const basic = Number(selectedEmp.basic_salary) || 0;
@@ -1223,6 +1300,7 @@ export default function PayrollPage() {
           onSendEmail={handleBulkSendEmail} 
           onClear={() => setSelectedIds([])} 
           loading={bulkLoading} 
+          allSelectedArePaid={allSelectedArePaid}
         />
       )}
 
@@ -1349,22 +1427,23 @@ export default function PayrollPage() {
                 <>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">Employee</label>
-                    <div className="relative">
-                      <select value={genForm.employee_id} 
-                        onChange={e => {
-                          const val = e.target.value;
-                          setGenForm(f => ({ ...f, employee_id: val === 'all' ? 'all' : Number(val) }));
-                        }} 
-                        disabled={loadingEmps} 
-                        className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 pr-9">
-                        <option value={0}>{loadingEmps ? 'Loading...' : 'Select employee'}</option>
-                        <option value="all">All Active Employees</option>
-                        {employees.map(e => (
-                          <option key={e.id} value={e.id}>{e.first_name} {e.last_name}{e.department?.name ? ` – ${e.department.name}` : ''}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    </div>
+                    <SearchableSelect
+                      options={[
+                        { id: 0, label: 'Select employee' },
+                        { id: 'all' as any, label: 'All Active Employees' },
+                        ...employees.map(e => ({
+                          id: e.id,
+                          label: `${e.first_name} ${e.last_name}`,
+                          sublabel: e.department?.name ? e.department.name : undefined
+                        }))
+                      ]}
+                      value={genForm.employee_id === 0 ? '' : genForm.employee_id}
+                      onChange={(val: any) => {
+                        setGenForm(f => ({ ...f, employee_id: val === '' ? 0 : val === 'all' ? 'all' : Number(val) }));
+                      }}
+                      disabled={loadingEmps}
+                      placeholder={loadingEmps ? 'Loading...' : 'Select employee'}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[

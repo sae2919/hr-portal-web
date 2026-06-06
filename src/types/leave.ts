@@ -47,11 +47,23 @@ export interface Leave {
 export interface LeaveBalance {
   id: number;
   employee_id: number;
+  employee?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    full_name: string;
+    employee_code: string;
+    department: {
+      id: number;
+      name: string;
+    } | null;
+  } | null;
   leave_type_id: number;
   leave_type: {
     id: number;
     name: string;
     color: string;
+    code: string;
   } | null;
   year: number;
   total_days: number;
@@ -65,4 +77,17 @@ export interface ApplyLeavePayload {
   start_date: string;
   end_date: string;
   reason: string;
+}
+
+export interface GroupedEmployeeLeaveBalances {
+  id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  employee_code: string;
+  department: {
+    id: number;
+    name: string;
+  } | null;
+  balances: LeaveBalance[];
 }

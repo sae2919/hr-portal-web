@@ -15,6 +15,7 @@ import {
   ArrowLeft, Loader2, UserPlus, IndianRupee, Users,
   ChevronDown, ChevronUp, AlertCircle,
 } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import Link from 'next/link';
 import { Department } from '@/types/department';
 import { Designation } from '@/types/designation';
@@ -249,7 +250,7 @@ export default function CreateEmployeePage() {
   useEffect(() => {
     const calculatedHra = Math.round((basic * hraPercentage) / 100);
     setValue('hra', calculatedHra, { shouldValidate: true });
-  }, [basic, hraPercentage, setValue]);
+  }, [basic, setValue]);
 
   const totalAllowances = allowances.reduce((s, a) => s + (a?.amount || 0), 0);
   const gross = basic + hra + totalAllowances + bonus;
@@ -338,6 +339,34 @@ export default function CreateEmployeePage() {
     }
   };
 
+  const handleHraAmountChange = (valStr: string) => {
+    const val = Number(valStr) || 0;
+    setValue('hra', val, { shouldValidate: true });
+    if (basic > 0) {
+      const pct = Math.round((val / basic) * 100);
+      setHraPercentage(pct);
+    }
+  };
+
+  const handleSpecialAllowanceChange = (valStr: string) => {
+    const val = Number(valStr) || 0;
+    const current = watch('allowances') || [];
+    const exists = current.find(a => a.type === 'special');
+    if (exists) {
+      setValue(
+        'allowances',
+        current.map(a => a.type === 'special' ? { ...a, amount: val } : a),
+        { shouldValidate: true }
+      );
+    } else {
+      setValue(
+        'allowances',
+        [...current, { type: 'special', amount: val }],
+        { shouldValidate: true }
+      );
+    }
+  };
+
   useEffect(() => {
     if (ctcInput && Number(ctcInput) > 0) {
       handleAnnualCTCChange(ctcInput);
@@ -406,7 +435,7 @@ export default function CreateEmployeePage() {
     createEmployee(payload as any, { onSuccess: () => router.push('/employees') });
   };
 
-  const ALLOWANCE_TYPES = ['transport', 'food', 'medical', 'special', 'other'] as const;
+  const ALLOWANCE_TYPES = ['transport', 'food', 'medical', 'other'] as const;
 
   return (
     <div className="space-y-3" suppressHydrationWarning>
@@ -509,17 +538,41 @@ export default function CreateEmployeePage() {
 
         {/* Job Information */}
         <Section title="Job Information" icon={<Users className="w-3 h-3 text-slate-500" />}>
-          <Field label="Department">
-            <select {...register('department_id', { setValueAs: v => v === '' ? null : Number(v) })} className={selectCls}>
-              <option value="">Select department</option>
-              {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+          <Field label="Department" required error={errors.department_id?.message}>
+            <SearchableSelect
+              options={[
+                { id: '' as any, label: 'Select department' },
+                ...departments.map((d: Department) => ({
+                  id: d.id,
+                  label: d.name
+                }))
+              ]}
+              value={watch('department_id') || ''}
+              onChange={(val) => {
+                const numVal = val === '' ? null : Number(val);
+                setValue('department_id', numVal, { shouldValidate: true });
+                setValue('designation_id', null, { shouldValidate: true });
+              }}
+              placeholder="Select department"
+            />
           </Field>
-          <Field label="Designation">
-            <select {...register('designation_id', { setValueAs: v => v === '' ? null : Number(v) })} className={selectCls}>
-              <option value="">{selectedDeptId ? 'Select designation' : 'Select department first'}</option>
-              {designations.map((d: Designation) => <option key={d.id} value={d.id}>{d.title}</option>)}
-            </select>
+          <Field label="Designation" required error={errors.designation_id?.message}>
+            <SearchableSelect
+              options={[
+                { id: '' as any, label: selectedDeptId ? 'Select designation' : 'Select department first' },
+                ...designations.map((d: Designation) => ({
+                  id: d.id,
+                  label: d.title
+                }))
+              ]}
+              value={watch('designation_id') || ''}
+              onChange={(val) => {
+                const numVal = val === '' ? null : Number(val);
+                setValue('designation_id', numVal, { shouldValidate: true });
+              }}
+              placeholder={selectedDeptId ? 'Select designation' : 'Select department first'}
+              disabled={!selectedDeptId}
+            />
             {selectedDeptId && designations.length === 0 && (
               <p className="text-xs text-slate-400 mt-0.5">No designations for this department.</p>
             )}
@@ -540,17 +593,22 @@ export default function CreateEmployeePage() {
                 </button>
               )}
             </div>
-            <select {...register('reporting_to', { setValueAs: v => v === '' ? null : Number(v) })} className={selectCls}>
-              <option value="">— No reporting manager —</option>
-              {reportingOptions.length === 0 && selectedDeptId && filterByDept
-                ? <option disabled value="">No managers in this department</option>
-                : reportingOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.full_name}{m.designation?.title ? ` · ${m.designation.title}` : ''}
-                      {!filterByDept && m.department?.name ? ` (${m.department.name})` : ''}
-                    </option>
-                  ))}
-            </select>
+            <SearchableSelect
+              options={[
+                { id: '' as any, label: '— No reporting manager —' },
+                ...reportingOptions.map((m: any) => ({
+                  id: m.id,
+                  label: m.full_name,
+                  sublabel: (m.designation?.title ? m.designation.title : '') + 
+                            (!filterByDept && m.department?.name ? ` (${m.department.name})` : '')
+                }))
+              ]}
+              value={watch('reporting_to') || ''}
+              onChange={(val) => {
+                setValue('reporting_to', val === '' ? null : Number(val), { shouldValidate: true });
+              }}
+              placeholder="Select reporting manager"
+            />
             <p className="text-xs text-slate-400">
               {!selectedDeptId ? 'Shows all managers. Select a department to filter.'
                 : filterByDept ? 'Showing managers in selected department. Toggle to see all.'
@@ -663,7 +721,7 @@ export default function CreateEmployeePage() {
             {/* Earnings */}
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Earnings</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <Field label={employmentType === 'intern' ? 'Stipend' : 'Basic Salary'} required error={errors.basic_salary?.message}>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
@@ -673,21 +731,28 @@ export default function CreateEmployeePage() {
                 </Field>
                 {showFullStructure && (
                   <>
-                    <Field label={`HRA (%) ${hra > 0 ? `· ${fmt(hra)}` : ''}`}>
+                    <Field label={`HRA (${hraPercentage}%)`} error={errors.hra?.message}>
                       <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
                         <Input
                           type="number"
-                          min="0"
-                          max="100"
-                          placeholder="e.g. 40"
-                          value={hraPercentage || ''}
-                          onChange={(e) => {
-                            const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                            setHraPercentage(val);
-                          }}
-                          className="h-9 pr-7"
+                          placeholder="0"
+                          value={watch('hra') || ''}
+                          onChange={(e) => handleHraAmountChange(e.target.value)}
+                          className="h-9 pl-7"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                      </div>
+                    </Field>
+                    <Field label="Special Allowance">
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={allowances.find((a: any) => a?.type === 'special')?.amount || ''}
+                          onChange={(e) => handleSpecialAllowanceChange(e.target.value)}
+                          className="h-9 pl-7"
+                        />
                       </div>
                     </Field>
                     <Field label="Bonus">

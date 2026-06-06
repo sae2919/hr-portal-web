@@ -30,6 +30,7 @@ import api from '@/lib/api';
 import { offboardingService, OffboardingRequest } from '@/services/offboardingService';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useDesignations } from '@/hooks/useDesignations';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -50,6 +51,11 @@ interface OnboardingRequest {
   tasks: OnboardingTask[];
   offer_letters: OfferLetter[];
   created_at: string;
+  onboarding_type: 'full_time' | 'intern' | 'free_intern';
+  custom_heading?: string;
+  required_documents?: string[];
+  optional_documents?: string[];
+  custom_document_labels?: Record<string, string>;
 }
 
 interface OnboardingDocument {
@@ -115,10 +121,11 @@ const documentTypes = [
   { value: 'id_proof', label: 'ID Proof', icon: Shield, required: true },
   { value: 'address_proof', label: 'Address Proof', icon: FileCheck, required: true },
   { value: 'degree', label: 'Degree Certificate', icon: File, required: true },
-  { value: 'previous_employment', label: 'Previous Employment', icon: Briefcase, required: false },
   { value: 'bank_details', label: 'Bank Details', icon: DollarSign, required: true },
   { value: 'pan_card', label: 'PAN Card', icon: Shield, required: true },
   { value: 'aadhaar_card', label: 'Aadhaar Card', icon: Shield, required: true },
+  { value: 'payslips', label: 'Previous Payslips', icon: Briefcase, required: false },
+  { value: 'experience_letter', label: 'Experience Letter', icon: FileText, required: false },
   { value: 'passport', label: 'Passport', icon: File, required: false },
   { value: 'other', label: 'Other', icon: File, required: false },
 ];
@@ -174,6 +181,88 @@ export default function OnboardingPage() {
     joining_date: '',
     ctc: '',
   });
+
+  const [onboardingType, setOnboardingType] = useState<'full_time' | 'intern' | 'free_intern'>('full_time');
+  const [customHeading, setCustomHeading] = useState('');
+  
+  const getDefaultDocumentConfig = (type: string) => {
+    const config: Record<string, 'required' | 'optional' | 'none'> = {
+      resume: 'required',
+      id_proof: 'required',
+      address_proof: 'required',
+      degree: 'required',
+      bank_details: 'required',
+      pan_card: 'required',
+      aadhaar_card: 'required',
+      payslips: 'none',
+      experience_letter: 'none',
+      passport: 'optional',
+    };
+
+    if (type === 'full_time') {
+      config.payslips = 'optional';
+      config.experience_letter = 'optional';
+    } else if (type === 'free_intern') {
+      config.bank_details = 'none';
+      config.pan_card = 'none';
+    }
+
+    return config;
+  };
+
+  const [docConfig, setDocConfig] = useState<Record<string, 'required' | 'optional' | 'none'>>(getDefaultDocumentConfig('full_time'));
+  const [customLabels, setCustomLabels] = useState<Record<string, string>>({});
+  const [newCustomDocName, setNewCustomDocName] = useState('');
+  const [newCustomDocRequired, setNewCustomDocRequired] = useState(true);
+
+  const handleAddCustomDoc = () => {
+    if (!newCustomDocName.trim()) return;
+    const name = newCustomDocName.trim();
+    const slug = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_+|_+$)/g, '');
+    
+    setDocConfig(prev => ({
+      ...prev,
+      [slug]: newCustomDocRequired ? 'required' : 'optional'
+    }));
+    
+    setCustomLabels(prev => ({
+      ...prev,
+      [slug]: name
+    }));
+    
+    setNewCustomDocName('');
+  };
+
+  const getRequestDocumentTypes = (req: OnboardingRequest) => {
+    const reqRequired = req.required_documents || [];
+    const reqOptional = req.optional_documents || [];
+    
+    if (reqRequired.length === 0 && reqOptional.length === 0) {
+      return documentTypes;
+    }
+    
+    const allDocKeys = [...reqRequired, ...reqOptional];
+    
+    return allDocKeys.map(key => {
+      const standard = documentTypes.find(d => d.value === key);
+      if (standard) {
+        return {
+          value: key,
+          label: standard.label,
+          icon: standard.icon,
+          required: reqRequired.includes(key)
+        };
+      }
+      
+      const customLabel = req.custom_document_labels?.[key] || key;
+      return {
+        value: key,
+        label: customLabel,
+        icon: FileText,
+        required: reqRequired.includes(key)
+      };
+    });
+  };
 
   // Offboarding States
   const [offboardingRequests, setOffboardingRequests] = useState<OffboardingRequest[]>([]);
@@ -314,7 +403,19 @@ export default function OnboardingPage() {
   // Create new onboarding request
   const createOnboardingRequest = async () => {
     try {
-      await api.post('/onboarding', formData);
+      const required_documents = Object.keys(docConfig).filter(k => docConfig[k] === 'required');
+      const optional_documents = Object.keys(docConfig).filter(k => docConfig[k] === 'optional');
+
+      const payload = {
+        ...formData,
+        onboarding_type: onboardingType,
+        custom_heading: customHeading,
+        required_documents,
+        optional_documents,
+        custom_document_labels: customLabels,
+      };
+
+      await api.post('/onboarding', payload);
       toast.success('Onboarding request created successfully');
       setShowRequestModal(false);
       setFormData({
@@ -326,6 +427,10 @@ export default function OnboardingPage() {
         joining_date: '',
         ctc: '',
       });
+      setOnboardingType('full_time');
+      setCustomHeading('');
+      setDocConfig(getDefaultDocumentConfig('full_time'));
+      setCustomLabels({});
       fetchData();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to create onboarding request');
@@ -739,9 +844,10 @@ export default function OnboardingPage() {
                   <tr>
                     <th className="px-6 py-4 text-left font-medium">Candidate</th>
                     <th className="px-6 py-4 text-left font-medium">Position</th>
+                    <th className="px-6 py-4 text-left font-medium">Type</th>
                     <th className="px-6 py-4 text-left font-medium">Joining Date</th>
                     <th className="px-6 py-4 text-left font-medium">Documents</th>
-                    <th className="px-6 py-4 text-left font-medium">Tasks</th>
+                    <th className="px-6 py-4 text-left font-medium">Verification</th>
                     <th className="px-6 py-4 text-left font-medium">Status</th>
                     <th className="px-6 py-4 text-right font-medium">Actions</th>
                   </tr>
@@ -749,7 +855,7 @@ export default function OnboardingPage() {
                 <tbody className="divide-y divide-slate-50 text-slate-700">
                   {filteredRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-12">
+                      <td colSpan={8} className="text-center py-12">
                         <Users size={48} className="mx-auto text-slate-200 mb-3" />
                         <p className="text-slate-400">No onboarding requests found</p>
                       </td>
@@ -759,6 +865,7 @@ export default function OnboardingPage() {
                       const verifiedDocs = request.documents.filter(d => d.status === 'verified').length;
                       const completedTasks = request.tasks.filter(t => t.status === 'completed').length;
                       const totalTasks = request.tasks.length;
+                      const totalDocs = (request.required_documents || []).length + (request.optional_documents || []).length || documentTypes.length;
                       
                       return (
                         <tr key={request.id} className="hover:bg-slate-50/70 transition cursor-pointer" onClick={() => setSelectedRequest(request)}>
@@ -774,13 +881,16 @@ export default function OnboardingPage() {
                               <p className="text-xs text-slate-400">{request.department}</p>
                             </div>
                           </td>
+                          <td className="px-6 py-4 capitalize text-slate-500 font-medium">
+                            {(request.onboarding_type || 'full_time').replace('_', ' ')}
+                          </td>
                           <td className="px-6 py-4 text-slate-500">
                             {new Date(request.joining_date).toLocaleDateString('en-IN')}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
-                              <Progress value={(verifiedDocs / (documentTypes.length || 1)) * 100} className="w-16 h-1.5" />
-                              <span className="text-xs text-slate-500 font-semibold">{verifiedDocs}/{documentTypes.length}</span>
+                              <Progress value={(verifiedDocs / (totalDocs || 1)) * 100} className="w-16 h-1.5" />
+                              <span className="text-xs text-slate-500 font-semibold">{verifiedDocs}/{totalDocs}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -942,7 +1052,7 @@ export default function OnboardingPage() {
               <TabsList className="grid w-full grid-cols-5 bg-slate-100 p-1 rounded-xl">
                 <TabsTrigger value="details" className="rounded-lg text-xs">Details</TabsTrigger>
                 <TabsTrigger value="documents" className="rounded-lg text-xs">Documents</TabsTrigger>
-                <TabsTrigger value="tasks" className="rounded-lg text-xs">Tasks</TabsTrigger>
+                <TabsTrigger value="tasks" className="rounded-lg text-xs">Verification</TabsTrigger>
                 <TabsTrigger value="assets" className="rounded-lg text-xs">Assets</TabsTrigger>
                 <TabsTrigger value="offer" className="rounded-lg text-xs">Offer Letter</TabsTrigger>
               </TabsList>
@@ -979,6 +1089,10 @@ export default function OnboardingPage() {
                     <p className="font-semibold text-slate-850">₹{selectedRequest.ctc?.toLocaleString('en-IN') || 'N/A'}</p>
                   </div>
                   <div>
+                    <Label className="text-slate-400 text-xs font-semibold">Onboarding Type</Label>
+                    <p className="font-semibold text-slate-850 capitalize">{(selectedRequest.onboarding_type || 'full_time').replace('_', ' ')}</p>
+                  </div>
+                  <div>
                     <Label className="text-slate-400 text-xs font-semibold">Onboarding Status</Label>
                     <div className="mt-1">
                       <Badge className={`rounded-lg capitalize ${getStatusColor(selectedRequest.status)}`}>
@@ -986,6 +1100,12 @@ export default function OnboardingPage() {
                       </Badge>
                     </div>
                   </div>
+                  {selectedRequest.custom_heading && (
+                    <div className="col-span-2">
+                      <Label className="text-slate-400 text-xs font-semibold">Custom Portal Heading</Label>
+                      <p className="font-semibold text-slate-850">{selectedRequest.custom_heading}</p>
+                    </div>
+                  )}
                 </div>
 
                 {selectedRequest.rejection_reason && (
@@ -1032,7 +1152,7 @@ export default function OnboardingPage() {
                 </div>
 
                 <div className="grid gap-3">
-                  {documentTypes.map((docType) => {
+                  {getRequestDocumentTypes(selectedRequest).map((docType) => {
                     const doc = selectedRequest.documents.find(d => d.document_type === docType.value);
                     return (
                       <div key={docType.value} className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl">
@@ -1088,7 +1208,15 @@ export default function OnboardingPage() {
                               )}
                             </>
                           )}
-                          {!doc && <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Required</span>}
+                          {!doc && (
+                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md ${
+                              docType.required 
+                                ? 'text-slate-400 bg-slate-100' 
+                                : 'text-slate-400 bg-slate-50 border border-slate-150'
+                            }`}>
+                              {docType.required ? 'Required' : 'Optional'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -1514,94 +1642,216 @@ export default function OnboardingPage() {
       )}
 
       {/* ──────────────────────────────────────────────────────────────── */}
+      {/* ──────────────────────────────────────────────────────────────── */}
       {/* MODAL: NEW ONBOARDING REQUEST */}
       {/* ──────────────────────────────────────────────────────────────── */}
       <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-        <DialogContent className="rounded-3xl p-6">
+        <DialogContent className="rounded-3xl p-6 sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-slate-800">New Onboarding Request</DialogTitle>
             <DialogDescription className="text-xs">Enter candidate details to start the onboarding process</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 text-sm mt-2">
-            <div>
-              <Label className="text-slate-600">Candidate Name *</Label>
-              <Input
-                value={formData.candidate_name}
-                onChange={(e) => setFormData({ ...formData, candidate_name: e.target.value })}
-                placeholder="Full name"
-                className="rounded-xl border-slate-200 h-10 mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-slate-600">Email *</Label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="Email address"
-                className="rounded-xl border-slate-200 h-10 mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-slate-600">Phone</Label>
-              <Input
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="Phone number"
-                className="rounded-xl border-slate-200 h-10 mt-1"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm mt-2">
+            {/* Left Column: Candidate Info */}
+            <div className="space-y-4">
               <div>
-                <Label className="text-slate-600">Position *</Label>
-                <select
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 h-10 mt-1 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select position</option>
-                  {designations.map((desig: any) => (
-                    <option key={desig.id} value={desig.title}>
-                      {desig.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label className="text-slate-600">Department *</Label>
-                <select
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 h-10 mt-1 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select department</option>
-                  {departments.map((dept: any) => (
-                    <option key={dept.id} value={dept.name}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-slate-600">Joining Date *</Label>
+                <Label className="text-slate-600">Candidate Name *</Label>
                 <Input
-                  type="date"
-                  value={formData.joining_date}
-                  onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
+                  value={formData.candidate_name}
+                  onChange={(e) => setFormData({ ...formData, candidate_name: e.target.value })}
+                  placeholder="Full name"
                   className="rounded-xl border-slate-200 h-10 mt-1"
                 />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-slate-600">Email *</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="Email address"
+                    className="rounded-xl border-slate-200 h-10 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600">Phone</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="Phone number"
+                    className="rounded-xl border-slate-200 h-10 mt-1"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-slate-600">Position *</Label>
+                  <SearchableSelect
+                    options={[
+                      { id: '', label: 'Select position' },
+                      ...designations.map((desig: any) => ({
+                        id: desig.title,
+                        label: desig.title
+                      }))
+                    ]}
+                    value={formData.position}
+                    onChange={(val) => setFormData({ ...formData, position: val })}
+                    className="h-10 mt-1 rounded-xl"
+                    placeholder="Select position"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600">Department *</Label>
+                  <SearchableSelect
+                    options={[
+                      { id: '', label: 'Select department' },
+                      ...departments.map((dept: any) => ({
+                        id: dept.name,
+                        label: dept.name
+                      }))
+                    ]}
+                    value={formData.department}
+                    onChange={(val) => setFormData({ ...formData, department: val })}
+                    className="h-10 mt-1 rounded-xl"
+                    placeholder="Select department"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-slate-600">Joining Date *</Label>
+                  <Input
+                    type="date"
+                    value={formData.joining_date}
+                    onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
+                    className="rounded-xl border-slate-200 h-10 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600">CTC (Annual)</Label>
+                  <Input
+                    type="number"
+                    value={formData.ctc}
+                    onChange={(e) => setFormData({ ...formData, ctc: e.target.value })}
+                    placeholder="Annual compensation"
+                    className="rounded-xl border-slate-200 h-10 mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-slate-600">Onboarding Type *</Label>
+                  <select
+                    value={onboardingType}
+                    onChange={(e) => {
+                      const val = e.target.value as 'full_time' | 'intern' | 'free_intern';
+                      setOnboardingType(val);
+                      setDocConfig(getDefaultDocumentConfig(val));
+                    }}
+                    className="w-full rounded-xl border border-slate-200 h-10 mt-1 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="full_time">Full Time</option>
+                    <option value="intern">Intern</option>
+                    <option value="free_intern">Free Intern</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-slate-600">Custom Request Heading (Optional)</Label>
+                  <Input
+                    value={customHeading}
+                    onChange={(e) => setCustomHeading(e.target.value)}
+                    placeholder="e.g. Please Upload Onboarding Documents"
+                    className="rounded-xl border-slate-200 h-10 mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Document Selection Checklist */}
+            <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 space-y-3 flex flex-col justify-between">
               <div>
-                <Label className="text-slate-600">CTC (Annual)</Label>
+                <p className="font-bold text-xs text-slate-700 uppercase tracking-wider mb-3">Configure Required Documents</p>
+                
+                <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1 text-xs">
+                  {Object.keys(docConfig).map((key) => {
+                    const label = customLabels[key] || documentTypes.find(d => d.value === key)?.label || key;
+                    const currentStatus = docConfig[key];
+                    
+                    return (
+                      <div key={key} className="flex items-center justify-between p-2 bg-white border border-slate-100 rounded-xl">
+                        <span className="font-medium text-slate-700">{label}</span>
+                        
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setDocConfig(prev => ({ ...prev, [key]: 'required' }))}
+                            className={`px-2 py-0.5 rounded text-[9px] font-semibold transition ${
+                              currentStatus === 'required'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            Required
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDocConfig(prev => ({ ...prev, [key]: 'optional' }))}
+                            className={`px-2 py-0.5 rounded text-[9px] font-semibold transition ${
+                              currentStatus === 'optional'
+                                ? 'bg-yellow-500 text-white'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            Optional
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDocConfig(prev => ({ ...prev, [key]: 'none' }))}
+                            className={`px-2 py-0.5 rounded text-[9px] font-semibold transition ${
+                              currentStatus === 'none'
+                                ? 'bg-red-500 text-white'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            Exclude
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Add Custom Document */}
+              <div className="pt-3 border-t border-slate-200 flex items-center gap-2 mt-3">
                 <Input
-                  type="number"
-                  value={formData.ctc}
-                  onChange={(e) => setFormData({ ...formData, ctc: e.target.value })}
-                  placeholder="Annual compensation"
-                  className="rounded-xl border-slate-200 h-10 mt-1"
+                  value={newCustomDocName}
+                  onChange={(e) => setNewCustomDocName(e.target.value)}
+                  placeholder="Request other custom document..."
+                  className="rounded-xl border-slate-200 h-9 text-xs flex-1"
                 />
+                <div className="flex items-center gap-1 shrink-0">
+                  <input
+                    type="checkbox"
+                    id="newCustomDocRequired"
+                    checked={newCustomDocRequired}
+                    onChange={(e) => setNewCustomDocRequired(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 border-slate-300"
+                  />
+                  <label htmlFor="newCustomDocRequired" className="text-[10px] text-slate-500 font-semibold cursor-pointer select-none">
+                    Required
+                  </label>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleAddCustomDoc}
+                  size="sm"
+                  className="bg-slate-800 hover:bg-slate-700 text-white rounded-xl h-9 text-xs px-3"
+                >
+                  Add
+                </Button>
               </div>
             </div>
           </div>
@@ -1624,18 +1874,19 @@ export default function OnboardingPage() {
           <div className="space-y-4 text-sm mt-2">
             <div>
               <Label className="text-slate-600">Select Employee *</Label>
-              <select
+              <SearchableSelect
+                options={[
+                  { id: '', label: 'Choose employee...' },
+                  ...employees.map((e) => ({
+                    id: e.id,
+                    label: `${e.full_name || `${e.first_name} ${e.last_name}`} (${e.employee_code})`
+                  }))
+                ]}
                 value={exitFormData.employee_id}
-                onChange={(e) => setExitFormData({ ...exitFormData, employee_id: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 mt-1"
-              >
-                <option value="">Choose employee...</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.full_name || `${e.first_name} ${e.last_name}`} ({e.employee_code})
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setExitFormData({ ...exitFormData, employee_id: val })}
+                className="h-10 mt-1 rounded-xl"
+                placeholder="Choose employee..."
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1696,7 +1947,7 @@ export default function OnboardingPage() {
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none mt-1"
               >
                 <option value="">Select document type</option>
-                {documentTypes.map(doc => (
+                {(selectedRequest ? getRequestDocumentTypes(selectedRequest) : documentTypes).map(doc => (
                   <option key={doc.value} value={doc.value}>{doc.label}</option>
                 ))}
               </select>

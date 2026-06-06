@@ -53,18 +53,74 @@ interface OnboardingRequest {
     driving_license?: string;
   };
   created_at: string;
+  onboarding_type?: 'full_time' | 'intern' | 'free_intern';
+  custom_heading?: string;
+  required_documents?: string[];
+  optional_documents?: string[];
+  custom_document_labels?: { [key: string]: string };
 }
 
-const documentTypes = [
-  { value: 'resume', label: 'Resume/CV', icon: FileText, required: true, desc: 'Your latest resume in PDF format.' },
-  { value: 'id_proof', label: 'ID Proof (Passport/Voter ID)', icon: Shield, required: true, desc: 'Government-issued photo identity proof.' },
-  { value: 'pan_card', label: 'PAN Card Copy', icon: Shield, required: true, desc: 'Permanent Account Number card copy.' },
-  { value: 'aadhaar_card', label: 'Aadhaar Card Copy', icon: Shield, required: true, desc: 'Aadhaar Card (front & back).' },
-  { value: 'address_proof', label: 'Address Proof', icon: FileCheck, required: true, desc: 'Electricity bill, rental agreement, or passport.' },
-  { value: 'degree', label: 'Degree Certificate', icon: File, required: true, desc: 'Highest educational degree certificate or mark sheet.' },
-  { value: 'bank_details', label: 'Bank Details (Passbook/Cheque)', icon: DollarSign, required: true, desc: 'Cancelled cheque or bank passbook front page.' },
-  { value: 'previous_employment', label: 'Previous Employment Proof', icon: Briefcase, required: false, desc: 'Relieving letter or experience certificate (if applicable).' },
-];
+const getCandidateDocumentTypes = (req: OnboardingRequest) => {
+  const standardMap: { [key: string]: { label: string; icon: any; desc: string } } = {
+    resume: { label: 'Resume/CV', icon: FileText, desc: 'Your latest resume in PDF format.' },
+    id_proof: { label: 'ID Proof (Passport/Voter ID)', icon: Shield, desc: 'Government-issued photo identity proof.' },
+    pan_card: { label: 'PAN Card Copy', icon: Shield, desc: 'Permanent Account Number card copy.' },
+    aadhaar_card: { label: 'Aadhaar Card Copy', icon: Shield, desc: 'Aadhaar Card (front & back).' },
+    address_proof: { label: 'Address Proof', icon: FileCheck, desc: 'Electricity bill, rental agreement, or passport.' },
+    degree: { label: 'Degree Certificate', icon: File, desc: 'Highest educational degree certificate or mark sheet.' },
+    bank_details: { label: 'Bank Details (Passbook/Cheque)', icon: DollarSign, desc: 'Cancelled cheque or bank passbook front page.' },
+    payslips: { label: 'Previous Payslips', icon: Briefcase, desc: 'Last 3 months salary slips.' },
+    experience_letter: { label: 'Experience Letter', icon: FileText, desc: 'Experience/Relieving letter from previous employer.' },
+    passport: { label: 'Passport Copy', icon: Shield, desc: 'Passport biographical page copy.' },
+  };
+
+  let reqDocs = req.required_documents;
+  let optDocs = req.optional_documents;
+  const customLabels = req.custom_document_labels || {};
+
+  if (!reqDocs) {
+    const type = req.onboarding_type || 'full_time';
+    if (type === 'free_intern') {
+      reqDocs = ['resume', 'id_proof', 'address_proof', 'degree', 'aadhaar_card'];
+      optDocs = optDocs || ['passport'];
+    } else if (type === 'intern') {
+      reqDocs = ['resume', 'id_proof', 'address_proof', 'degree', 'bank_details', 'pan_card', 'aadhaar_card'];
+      optDocs = optDocs || ['passport'];
+    } else {
+      reqDocs = ['resume', 'id_proof', 'address_proof', 'degree', 'bank_details', 'pan_card', 'aadhaar_card'];
+      optDocs = optDocs || ['payslips', 'experience_letter', 'passport'];
+    }
+  }
+  if (!optDocs) {
+    optDocs = [];
+  }
+
+  const list: { value: string; label: string; icon: any; required: boolean; desc: string }[] = [];
+
+  const addDoc = (val: string, required: boolean) => {
+    if (standardMap[val]) {
+      list.push({
+        value: val,
+        required,
+        ...standardMap[val]
+      });
+    } else {
+      const customLabel = customLabels[val] || val.replace(/^custom_/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      list.push({
+        value: val,
+        label: customLabel,
+        icon: FileText,
+        required,
+        desc: `Please upload your ${customLabel}.`
+      });
+    }
+  };
+
+  reqDocs.forEach(val => addDoc(val, true));
+  optDocs.forEach(val => addDoc(val, false));
+
+  return list;
+};
 
 export default function CandidateOnboardingPage({
   params
@@ -230,8 +286,9 @@ export default function CandidateOnboardingPage({
     e.preventDefault();
 
     // Check if all required docs are uploaded
+    const docTypes = request ? getCandidateDocumentTypes(request) : [];
     const uploadedTypes = request?.documents.map(d => d.document_type) || [];
-    const missingRequired = documentTypes
+    const missingRequired = docTypes
       .filter(t => t.required)
       .filter(t => !uploadedTypes.includes(t.value));
 
@@ -324,10 +381,13 @@ export default function CandidateOnboardingPage({
     );
   }
 
-  const requiredTypes = documentTypes.filter(d => d.required).map(d => d.value);
+  const docTypes = request ? getCandidateDocumentTypes(request) : [];
+  const requiredTypes = docTypes.filter(d => d.required).map(d => d.value);
   const uploadedDocs = request.documents || [];
   const uploadedRequiredDocs = uploadedDocs.filter(d => requiredTypes.includes(d.document_type));
-  const progressPercent = Math.round((uploadedRequiredDocs.length / requiredTypes.length) * 100);
+  const progressPercent = requiredTypes.length > 0 
+    ? Math.round((uploadedRequiredDocs.length / requiredTypes.length) * 100) 
+    : 100;
 
   const isApproved = request.status === 'approved' || request.status === 'onboarded';
   const isRejected = request.status === 'rejected';
@@ -391,7 +451,9 @@ export default function CandidateOnboardingPage({
             <div className="flex items-center gap-2 text-indigo-200 text-xs font-bold uppercase tracking-wider">
               <Sparkles size={14} className="animate-pulse" /> Techsprout Onboarding
             </div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Onboarding Details & Documents</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight">
+              {request.custom_heading || "Onboarding Details & Documents"}
+            </h1>
             <p className="text-indigo-100 text-sm max-w-xl">
               Congratulations, <span className="font-semibold text-white">{request.candidate_name}</span>! Please complete this form to submit your employee details and document copies.
             </p>
@@ -669,7 +731,7 @@ export default function CandidateOnboardingPage({
           </div>
 
           <div className="divide-y divide-slate-100">
-            {documentTypes.map((docType) => {
+            {docTypes.map((docType) => {
               const uploadedDoc = uploadedDocs.find(d => d.document_type === docType.value);
               const isUploading = uploadingType === docType.value;
               

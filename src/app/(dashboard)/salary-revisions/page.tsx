@@ -11,9 +11,11 @@ import { Label } from '@/components/ui/label';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   TrendingUp, Plus, Search, Loader2, Download, Calendar, 
-  ChevronRight, ArrowRight, DollarSign, Award, X, Sparkles, User
+  ChevronRight, ArrowRight, DollarSign, Award, X, Sparkles, User,
+  Eye, Edit3, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export default function SalaryRevisionsPage() {
   const queryClient = useQueryClient();
@@ -37,11 +39,17 @@ export default function SalaryRevisionsPage() {
   const [submitPending, setSubmitPending] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   
+  // View/Edit modal states
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [viewingRevision, setViewingRevision] = useState<SalaryRevision | null>(null);
+  const [editingRevision, setEditingRevision] = useState<SalaryRevision | null>(null);
+  
   // HRA percentage & Promotion designation states
   const [hraPercentage, setHraPercentage] = useState('');
   const [newDesignationId, setNewDesignationId] = useState('');
   const [annualCTCInput, setAnnualCTCInput] = useState('');
   const [isCtcFocused, setIsCtcFocused] = useState(false);
+  const [newEmploymentType, setNewEmploymentType] = useState('');
 
   // Load active employees for admin dropdown
   const { data: employees = [] } = useEmployees();
@@ -93,7 +101,7 @@ export default function SalaryRevisionsPage() {
 
   // Find selected employee to extract their current active salary
   const selectedEmployee = employees.find(e => e.id === Number(selectedEmpId));
-  const isIntern = selectedEmployee?.employment_type === 'intern';
+  const isIntern = newEmploymentType === 'intern';
   
   const currentBasic = selectedEmployee ? Number(selectedEmployee.basic_salary || 0) : 0;
   const currentHra = selectedEmployee ? Number(selectedEmployee.hra || 0) : 0;
@@ -109,8 +117,47 @@ export default function SalaryRevisionsPage() {
   const revisedGross = revisedBasic + revisedHra + revisedAllowances + revisedBonus;
 
   // Real-time calculation of percentage increase
-  const grossDiff = revisedGross - currentGross;
-  const incrementPercent = currentGross > 0 ? ((grossDiff / currentGross) * 100).toFixed(1) : '0';
+  const comparisonBaseGross = editingRevision ? Number(editingRevision.old_gross_salary || 0) : (currentGross || 0);
+  const grossDiff = revisedGross - comparisonBaseGross;
+  const rawPercent = comparisonBaseGross > 0 ? ((grossDiff / comparisonBaseGross) * 100) : (revisedGross > 0 ? 100.00 : 0.00);
+  const incrementPercent = isNaN(rawPercent) ? '0.00' : rawPercent.toFixed(2);
+
+  const handleOpenViewModal = (rev: SalaryRevision) => {
+    setViewingRevision(rev);
+    setViewModalOpen(true);
+  };
+
+  const handleOpenEditModal = (rev: SalaryRevision) => {
+    setEditingRevision(rev);
+    setSelectedEmpId(String(rev.employee_id));
+    setNewBasic(String(rev.new_basic_salary));
+    setNewHra(String(rev.new_hra));
+    
+    const basicVal = Number(rev.new_basic_salary) || 0;
+    const hraVal = Number(rev.new_hra) || 0;
+    const percentage = basicVal > 0 ? Math.round((hraVal / basicVal) * 100) : 0;
+    setHraPercentage(String(percentage));
+    
+    setNewAllowances(String(rev.new_allowances));
+    setNewBonus(String(rev.new_bonus));
+    setEffectiveDate(rev.effective_date ? rev.effective_date.slice(0, 10) : '');
+    setReason(rev.reason || 'Annual Appraisal');
+    setNewEmploymentType(rev.new_employment_type || rev.employee?.employment_type || 'full_time');
+    setNewDesignationId(rev.new_designation_id ? String(rev.new_designation_id) : '');
+    setModalOpen(true);
+  };
+
+  const handleDeleteRevision = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this salary revision record?')) return;
+    try {
+      await salaryRevisionService.deleteRevision(id);
+      toast.success('Salary revision record deleted successfully');
+      fetchRevisions();
+    } catch (err) {
+      console.error('Failed to delete salary revision:', err);
+      toast.error('Failed to delete salary revision');
+    }
+  };
 
   const handleOpenAddModal = () => {
     setSelectedEmpId('');
@@ -122,6 +169,7 @@ export default function SalaryRevisionsPage() {
     setNewBonus('');
     setEffectiveDate(new Date().toISOString().split('T')[0]);
     setReason('Annual Appraisal');
+    setNewEmploymentType('');
     setModalOpen(true);
   };
 
@@ -136,6 +184,7 @@ export default function SalaryRevisionsPage() {
       setNewAllowances(isEmpIntern ? '0' : String(emp.total_allowances || emp.allowances || ''));
       setNewBonus(isEmpIntern ? '0' : String(emp.bonus || ''));
       setNewDesignationId(String(emp.designation_id || ''));
+      setNewEmploymentType(emp.employment_type || 'full_time');
       
       const basicVal = Number(emp.basic_salary || 0);
       const hraVal = isEmpIntern ? 0 : Number(emp.hra || 0);
@@ -227,23 +276,39 @@ export default function SalaryRevisionsPage() {
 
     setSubmitPending(true);
     try {
-      await salaryRevisionService.createRevision({
-        employee_id: Number(selectedEmpId),
-        new_basic_salary: Number(newBasic),
-        new_hra: Number(newHra),
-        new_allowances: Number(newAllowances),
-        new_bonus: Number(newBonus),
-        effective_date: effectiveDate,
-        reason,
-        ...(reason === 'Promotion' && newDesignationId ? { new_designation_id: Number(newDesignationId) } : {}),
-      });
-      toast.success('Appraisal revision submitted and activated!');
+      if (editingRevision) {
+        await salaryRevisionService.updateRevision(editingRevision.id, {
+          new_basic_salary: Number(newBasic),
+          new_hra: Number(newHra),
+          new_allowances: Number(newAllowances),
+          new_bonus: Number(newBonus),
+          effective_date: effectiveDate,
+          reason,
+          new_employment_type: newEmploymentType,
+          ...(reason === 'Promotion' && newDesignationId ? { new_designation_id: Number(newDesignationId) } : {}),
+        });
+        toast.success('Appraisal revision updated successfully!');
+      } else {
+        await salaryRevisionService.createRevision({
+          employee_id: Number(selectedEmpId),
+          new_basic_salary: Number(newBasic),
+          new_hra: Number(newHra),
+          new_allowances: Number(newAllowances),
+          new_bonus: Number(newBonus),
+          effective_date: effectiveDate,
+          reason,
+          new_employment_type: newEmploymentType,
+          ...(reason === 'Promotion' && newDesignationId ? { new_designation_id: Number(newDesignationId) } : {}),
+        });
+        toast.success('Appraisal revision submitted and activated!');
+      }
       queryClient.invalidateQueries({ queryKey: ['employee'] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       fetchRevisions();
       setModalOpen(false);
+      setEditingRevision(null);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to revise salary structure');
+      toast.error(err?.response?.data?.message || 'Failed to submit salary revision');
     } finally {
       setSubmitPending(false);
     }
@@ -325,7 +390,7 @@ export default function SalaryRevisionsPage() {
                       (myEmployeeDetails.hra || 0) + 
                       (myEmployeeDetails.total_allowances || myEmployeeDetails.allowances || 0) + 
                       (myEmployeeDetails.bonus || 0)
-                    ).toLocaleString('en-IN')}/mo
+                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
                   </p>
                   <p className="text-xs text-blue-100 mt-2">
                     Joined on {myEmployeeDetails.joining_date ? String(myEmployeeDetails.joining_date).slice(0, 10) : 'N/A'}
@@ -366,14 +431,18 @@ export default function SalaryRevisionsPage() {
                         </div>
                         <div className="flex items-center gap-3 mt-3">
                           <p className="text-sm font-semibold text-slate-400 line-through">
-                            ₹{Number(rev.old_gross_salary).toLocaleString('en-IN')}
+                            ₹{Number(rev.old_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                           <ArrowRight size={14} className="text-slate-400" />
                           <p className="text-base font-bold text-slate-800">
-                            ₹{Number(rev.new_gross_salary).toLocaleString('en-IN')}
+                            ₹{Number(rev.new_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
-                          <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-lg ml-2">
-                            +{rev.increment_percentage}%
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ml-2 ${
+                            Number(rev.increment_percentage) >= 0
+                              ? 'text-green-600 bg-green-50'
+                              : 'text-red-600 bg-red-50'
+                          }`}>
+                            {Number(rev.increment_percentage) >= 0 ? '+' : ''}{Number(rev.increment_percentage).toFixed(2)}%
                           </span>
                         </div>
                       </div>
@@ -450,42 +519,79 @@ export default function SalaryRevisionsPage() {
                         <p className="font-semibold text-slate-700">
                           {rev.employee ? `${rev.employee.first_name} ${rev.employee.last_name}` : 'Unknown'}
                         </p>
-                        <p className="text-xs text-slate-400">
-                          {rev.employee?.employee_code || ''}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span className="text-xs text-slate-400">
+                            {rev.employee?.employee_code || ''}
+                          </span>
+                          {rev.old_employment_type && rev.new_employment_type && rev.old_employment_type !== rev.new_employment_type && (
+                            <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold capitalize border border-blue-100">
+                              {rev.old_employment_type.replace('_', ' ')} → {rev.new_employment_type.replace('_', ' ')}
+                            </span>
+                          )}
+                          {rev.old_designation && rev.new_designation && rev.old_designation.title !== rev.new_designation.title && (
+                            <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold border border-amber-100/50">
+                              {rev.old_designation.title} → {rev.new_designation.title}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-xs font-medium text-slate-600 capitalize">
                         {rev.reason}
                       </td>
                       <td className="px-5 py-4 text-slate-500 text-xs">
-                        ₹{Number(rev.old_gross_salary).toLocaleString('en-IN')}/mo
+                        ₹{Number(rev.old_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
                       </td>
                       <td className="px-5 py-4 text-slate-800 font-semibold text-xs">
-                        ₹{Number(rev.new_gross_salary).toLocaleString('en-IN')}/mo
+                        ₹{Number(rev.new_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-lg">
-                          +{rev.increment_percentage}%
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                          Number(rev.increment_percentage) >= 0
+                            ? 'text-green-600 bg-green-50'
+                            : 'text-red-600 bg-red-50'
+                        }`}>
+                          {Number(rev.increment_percentage) >= 0 ? '+' : ''}{Number(rev.increment_percentage).toFixed(2)}%
                         </span>
                       </td>
                       <td className="px-5 py-4 text-slate-500 text-xs">
                         {rev.effective_date ? String(rev.effective_date).slice(0, 10) : ''}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <Button
-                          onClick={() => handleDownload(rev)}
-                          disabled={downloadingId === rev.id}
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600"
-                          title="Download Letter"
-                        >
-                          {downloadingId === rev.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Download size={14} />
-                          )}
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenViewModal(rev)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEditModal(rev)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-amber-500 transition-colors"
+                            title="Edit Revision"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRevision(rev.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                            title="Delete Revision"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDownload(rev)}
+                            disabled={downloadingId === rev.id}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-green-600 disabled:opacity-50 transition-colors"
+                            title="Download Letter"
+                          >
+                            {downloadingId === rev.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Download size={14} />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -520,223 +626,424 @@ export default function SalaryRevisionsPage() {
       {/* Revise Salary Modal (Admin Only) */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setModalOpen(false)} />
-          <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-lg mx-4 p-6 overflow-hidden border border-slate-100">
-            <div className="flex items-center justify-between mb-6">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setModalOpen(false); setEditingRevision(null); }} />
+          <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-4xl mx-4 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center animate-pulse">
                   <TrendingUp className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-800">Apply Salary Revision</h2>
-                  <p className="text-xs text-slate-400">Submit appraisal increments for employees.</p>
+                  <h2 className="text-base font-bold text-slate-800">{editingRevision ? 'Edit Salary Revision' : 'Apply Salary Revision'}</h2>
+                  <p className="text-xs text-slate-400">{editingRevision ? 'Update appraisal increment details.' : 'Submit appraisal increments for employees.'}</p>
                 </div>
               </div>
-              <button onClick={() => setModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+              <button onClick={() => { setModalOpen(false); setEditingRevision(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Select Employee */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">Select Employee <span className="text-red-500">*</span></Label>
-                <select
-                  value={selectedEmpId}
-                  onChange={(e) => handleEmployeeChange(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  required
-                >
-                  <option value="">Choose employee...</option>
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.full_name || `${e.first_name} ${e.last_name}`} ({e.employee_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Annual CTC Input */}
-              <div className="space-y-1.5 border-b border-slate-100 pb-3">
-                <Label className="text-xs font-semibold text-slate-700">Annual CTC</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                  <Input
-                    type="number"
-                    value={annualCTCInput}
-                    onFocus={() => setIsCtcFocused(true)}
-                    onBlur={() => setIsCtcFocused(false)}
-                    onChange={(e) => handleAnnualCTCChange(e.target.value)}
-                    placeholder={isIntern ? "e.g. 180000" : "e.g. 360000"}
-                    className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
-                  />
-                </div>
-              </div>
-
-              {/* Form Input Grid */}
-              <div className={isIntern ? "grid grid-cols-1" : "grid grid-cols-2 gap-3"}>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">
-                    {isIntern ? 'New Stipend' : 'New Basic Salary'} <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    value={newBasic}
-                    onChange={(e) => handleBasicChange(e.target.value)}
-                    placeholder={isIntern ? "e.g. 15000" : "e.g. 35000"}
-                    className="h-10 border-slate-200 rounded-xl"
-                    required
-                  />
-                </div>
-
-                {!isIntern && (
-                  <>
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  
+                  {/* Left Column: Selection, Info, & Transition metadata */}
+                  <div className="space-y-4">
+                    {/* Select Employee */}
                     <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <Label className="text-xs font-semibold text-slate-700">New HRA (%) <span className="text-red-500">*</span></Label>
-                        {newHra && <span className="text-[10px] font-bold text-slate-500">₹{Number(newHra).toLocaleString('en-IN')}</span>}
+                      <Label className="text-xs font-semibold text-slate-700">Select Employee <span className="text-red-500">*</span></Label>
+                      <SearchableSelect
+                        options={[
+                          { id: '', label: 'Choose employee...' },
+                          ...employees.map((e) => ({
+                            id: e.id,
+                            label: `${e.full_name || `${e.first_name} ${e.last_name}`} (${e.employee_code})`,
+                          }))
+                        ]}
+                        value={selectedEmpId === '' ? '' : Number(selectedEmpId)}
+                        onChange={(val) => handleEmployeeChange(val === '' ? '' : String(val))}
+                        disabled={!!editingRevision}
+                        placeholder="Choose employee..."
+                      />
+                    </div>
+
+                    {selectedEmployee && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-2.5 shadow-inner">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Current Employee Details</span>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-slate-400 font-medium">Current Job Type:</span>
+                          <strong className="capitalize text-slate-700 font-semibold">{selectedEmployee.employment_type?.replace('_', ' ') || 'N/A'}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400 font-medium">Current Annual Package (CTC):</span>
+                          <strong className="text-slate-700 font-semibold">₹{(Number(currentGross || 0) * 12).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/yr</strong>
+                        </div>
+                        {editingRevision && (
+                          <div className="flex justify-between border-t border-slate-200/50 pt-2">
+                            <span className="text-slate-400 font-medium">Original Base Package (CTC):</span>
+                            <strong className="text-slate-700 font-semibold">₹{(Number(editingRevision.old_gross_salary || 0) * 12).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/yr</strong>
+                          </div>
+                        )}
                       </div>
-                      <Input
-                        type="number"
-                        value={hraPercentage}
-                        onChange={(e) => handleHraPercentageChange(e.target.value)}
-                        placeholder="e.g. 40"
-                        className="h-10 border-slate-200 rounded-xl"
-                        required
-                      />
+                    )}
+
+                    {/* Job Type Change Picker */}
+                    {selectedEmployee && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-3">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Employment Transition</span>
+                        <div className="grid grid-cols-2 gap-3 mt-1">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-700">Current Job Type</Label>
+                            <Input
+                              value={selectedEmployee.employment_type?.replace('_', ' ').toUpperCase() || 'N/A'}
+                              disabled
+                              className="h-10 border-slate-200 rounded-xl bg-slate-100 cursor-not-allowed uppercase text-xs font-semibold text-slate-500"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-700">New Job Type <span className="text-red-500">*</span></Label>
+                            <select
+                              value={newEmploymentType}
+                              onChange={(e) => setNewEmploymentType(e.target.value)}
+                              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                              required
+                            >
+                              <option value="full_time">Full Time</option>
+                              <option value="part_time">Part Time</option>
+                              <option value="contract">Contract</option>
+                              <option value="intern">Intern</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Effective Date & Reason / Description */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-slate-700">Effective Date <span className="text-red-500">*</span></Label>
+                        <Input
+                          type="date"
+                          value={effectiveDate}
+                          onChange={(e) => setEffectiveDate(e.target.value)}
+                          className="h-10 border-slate-200 rounded-xl"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-slate-700">Reason / Description <span className="text-red-500">*</span></Label>
+                        <select
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                          required
+                        >
+                          <option value="Annual Appraisal">Annual Appraisal</option>
+                          <option value="Promotion">Promotion</option>
+                          <option value="Market Correction">Market Correction</option>
+                          <option value="Joining Bonus / Package adjustment">Joining Package Adjustment</option>
+                          <option value="Special Increment">Special Increment</option>
+                        </select>
+                      </div>
                     </div>
 
+                    {/* Promotion designation picker */}
+                    {reason === 'Promotion' && selectedEmployee && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-3 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-500">Current Designation:</span>
+                          <span className="font-bold text-slate-800">
+                            {selectedEmployee.designation?.title || 'None'}
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-slate-700">Promote to Designation <span className="text-red-500">*</span></Label>
+                          <SearchableSelect
+                            options={[
+                              { id: '', label: 'Select target designation...' },
+                              ...designations.map((d: any) => ({
+                                id: d.id,
+                                label: d.title
+                              }))
+                            ]}
+                            value={newDesignationId === '' ? '' : Number(newDesignationId)}
+                            onChange={(val) => setNewDesignationId(val === '' ? '' : String(val))}
+                            placeholder="Select target designation..."
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Salary input grid & Impact Comparison */}
+                  <div className="space-y-4">
+                    {/* Annual CTC Input */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-700">New Allowances <span className="text-red-500">*</span></Label>
-                      <Input
-                        type="number"
-                        value={newAllowances}
-                        onChange={(e) => setNewAllowances(e.target.value)}
-                        placeholder="e.g. 10000"
-                        className="h-10 border-slate-200 rounded-xl"
-                        required
-                      />
+                      <Label className="text-xs font-semibold text-slate-700">Annual CTC</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                        <Input
+                          type="number"
+                          value={annualCTCInput}
+                          onFocus={() => setIsCtcFocused(true)}
+                          onBlur={() => setIsCtcFocused(false)}
+                          onChange={(e) => handleAnnualCTCChange(e.target.value)}
+                          placeholder={isIntern ? "e.g. 180000" : "e.g. 360000"}
+                          className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-700">New Monthly Bonus <span className="text-red-500">*</span></Label>
-                      <Input
-                        type="number"
-                        value={newBonus}
-                        onChange={(e) => setNewBonus(e.target.value)}
-                        placeholder="e.g. 5000"
-                        className="h-10 border-slate-200 rounded-xl"
-                        required
-                      />
+                    {/* Form Input Grid */}
+                    <div className={isIntern ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
+                      <div className="space-y-1.5 col-span-2 md:col-span-1">
+                        <Label className="text-xs font-semibold text-slate-700">
+                          {isIntern ? 'New Stipend' : 'New Basic Salary'} <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          type="number"
+                          value={newBasic}
+                          onChange={(e) => handleBasicChange(e.target.value)}
+                          placeholder={isIntern ? "e.g. 15000" : "e.g. 35000"}
+                          className="h-10 border-slate-200 rounded-xl"
+                          required
+                        />
+                      </div>
+
+                      {!isIntern && (
+                        <>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center">
+                              <Label className="text-xs font-semibold text-slate-700">New HRA (%) <span className="text-red-500">*</span></Label>
+                              {newHra && <span className="text-[10px] font-bold text-slate-500">₹{Number(newHra).toLocaleString('en-IN')}</span>}
+                            </div>
+                            <Input
+                              type="number"
+                              value={hraPercentage}
+                              onChange={(e) => handleHraPercentageChange(e.target.value)}
+                              placeholder="e.g. 40"
+                              className="h-10 border-slate-200 rounded-xl"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-700">New Allowances <span className="text-red-500">*</span></Label>
+                            <Input
+                              type="number"
+                              value={newAllowances}
+                              onChange={(e) => setNewAllowances(e.target.value)}
+                              placeholder="e.g. 10000"
+                              className="h-10 border-slate-200 rounded-xl"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-700">New Monthly Bonus <span className="text-red-500">*</span></Label>
+                            <Input
+                              type="number"
+                              value={newBonus}
+                              onChange={(e) => setNewBonus(e.target.value)}
+                              placeholder="e.g. 5000"
+                              className="h-10 border-slate-200 rounded-xl"
+                              required
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </>
-                )}
+
+                    {/* Real-time Appraisal comparison panel */}
+                    {selectedEmpId && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-2.5 shadow-inner">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Revision Impact</span>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="font-semibold text-slate-500 flex items-center gap-1.5">
+                            <User size={13} className="text-slate-400" />
+                            {editingRevision 
+                              ? (isIntern ? 'Previous Stipend:' : 'Previous CTC:') 
+                              : (isIntern ? 'Current Stipend:' : 'Current CTC:')}
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            ₹{Number(comparisonBaseGross || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-500 flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-amber-400 animate-pulse" />
+                            {isIntern ? 'Proposed Stipend:' : 'Proposed CTC:'}
+                          </span>
+                          <span className="font-bold text-blue-600 text-sm">
+                            ₹{Number(revisedGross || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-slate-200/50 pt-2 font-bold text-slate-800">
+                          <span>{isIntern ? 'Proposed Stipend Increase:' : 'Proposed Package Increase:'}</span>
+                          <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold ${
+                            Number(incrementPercent) >= 0 
+                              ? 'text-green-700 bg-green-50' 
+                              : 'text-red-700 bg-red-50'
+                          }`}>
+                            {Number(incrementPercent) >= 0 ? '+' : ''}{incrementPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">Effective Date <span className="text-red-500">*</span></Label>
-                  <Input
-                    type="date"
-                    value={effectiveDate}
-                    onChange={(e) => setEffectiveDate(e.target.value)}
-                    className="h-10 border-slate-200 rounded-xl"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">Reason / Description <span className="text-red-500">*</span></Label>
-                  <select
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    required
-                  >
-                    <option value="Annual Appraisal">Annual Appraisal</option>
-                    <option value="Promotion">Promotion</option>
-                    <option value="Market Correction">Market Correction</option>
-                    <option value="Joining Bonus / Package adjustment">Joining Package Adjustment</option>
-                    <option value="Special Increment">Special Increment</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Promotion designation picker */}
-              {reason === 'Promotion' && selectedEmployee && (
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-500">Current Designation:</span>
-                    <span className="font-bold text-slate-800">
-                      {selectedEmployee.designation?.title || 'None'}
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-slate-700">Promote to Designation <span className="text-red-500">*</span></Label>
-                    <select
-                      value={newDesignationId}
-                      onChange={(e) => setNewDesignationId(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      required
-                    >
-                      <option value="">Select target designation...</option>
-                      {designations.map((d: any) => (
-                        <option key={d.id} value={d.id}>
-                          {d.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* Real-time Appraisal comparison panel */}
-              {selectedEmpId && (
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-500 flex items-center gap-1.5">
-                      <User size={13} className="text-slate-400" />
-                      {isIntern ? 'Employee Current Stipend:' : 'Employee Current CTC:'}
-                    </span>
-                    <span className="font-bold text-slate-800">
-                      ₹{currentGross.toLocaleString('en-IN')}/mo
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-500 flex items-center gap-1.5">
-                      <Sparkles size={13} className="text-amber-400" />
-                      {isIntern ? 'Proposed New Stipend:' : 'Proposed New CTC:'}
-                    </span>
-                    <span className="font-bold text-blue-600">
-                      ₹{revisedGross.toLocaleString('en-IN')}/mo
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-200/50 pt-2 font-bold text-slate-800">
-                    <span>{isIntern ? 'Proposed Stipend Increase:' : 'Proposed Package Increase:'}</span>
-                    <span className={`px-2 py-0.5 rounded-lg text-[10px] ${
-                      Number(incrementPercent) >= 0 
-                        ? 'text-green-700 bg-green-50' 
-                        : 'text-red-700 bg-red-50'
-                    }`}>
-                      {Number(incrementPercent) >= 0 ? '+' : ''}{incrementPercent}%
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-3">
-                <Button type="button" variant="outline" onClick={() => setModalOpen(false)} className="flex-1 rounded-xl">
+              {/* Actions Footer */}
+              <div className="flex gap-3 p-6 border-t border-slate-100 bg-slate-50/50 justify-end">
+                <Button type="button" variant="outline" onClick={() => { setModalOpen(false); setEditingRevision(null); }} className="rounded-xl px-5 h-11">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitPending} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-sm">
+                <Button type="submit" disabled={submitPending} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-sm px-5 h-11 transition-all">
                   {submitPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Confirm Increment
+                  {editingRevision ? 'Save Changes' : 'Confirm Increment'}
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Salary Revision Modal */}
+      {viewModalOpen && viewingRevision && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewModalOpen(false)} />
+          <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-lg mx-4 p-6 overflow-hidden border border-slate-100 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Salary Revision Details</h2>
+                  <p className="text-xs text-slate-400">
+                    {viewingRevision.employee ? `${viewingRevision.employee.first_name} ${viewingRevision.employee.last_name}` : 'Unknown Employee'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setViewModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Reason</p>
+                  <p className="text-sm font-semibold text-slate-700 capitalize">{viewingRevision.reason}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Effective Date</p>
+                  <p className="text-sm font-semibold text-slate-700">
+                    {viewingRevision.effective_date ? String(viewingRevision.effective_date).slice(0, 10) : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {viewingRevision.old_employment_type && (
+                <div className="grid grid-cols-2 gap-4 bg-slate-50/50 border border-slate-100 rounded-2xl p-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium">Old Job Type:</span>{' '}
+                    <strong className="capitalize text-slate-700 font-semibold">{viewingRevision.old_employment_type.replace('_', ' ')}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium">New Job Type:</span>{' '}
+                    <strong className="capitalize text-blue-600 font-semibold">{viewingRevision.new_employment_type?.replace('_', ' ') || 'N/A'}</strong>
+                  </div>
+                </div>
+              )}
+
+              {viewingRevision.old_designation && (
+                <div className="grid grid-cols-2 gap-4 bg-amber-50/30 border border-amber-100/50 rounded-2xl p-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium">Previous Role:</span>{' '}
+                    <strong className="text-slate-700 font-semibold">{viewingRevision.old_designation.title}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium">Promoted Role:</span>{' '}
+                    <strong className="text-amber-700 font-semibold">{viewingRevision.new_designation?.title || 'N/A'}</strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/50 p-4 space-y-3">
+                <div className="grid grid-cols-3 text-xs text-slate-400 font-bold border-b border-slate-200/50 pb-2">
+                  <span>Salary Component</span>
+                  <span className="text-right">Old structure</span>
+                  <span className="text-right">New structure</span>
+                </div>
+                
+                {[
+                  { label: 'Basic / Stipend', old: viewingRevision.old_basic_salary, new: viewingRevision.new_basic_salary },
+                  { label: 'HRA', old: viewingRevision.old_hra, new: viewingRevision.new_hra },
+                  { label: 'Allowances', old: viewingRevision.old_allowances, new: viewingRevision.new_allowances },
+                  { label: 'Bonus', old: viewingRevision.old_bonus, new: viewingRevision.new_bonus },
+                ].map((item) => (
+                  <div key={item.label} className="grid grid-cols-3 text-xs">
+                    <span className="text-slate-500">{item.label}</span>
+                    <span className="text-right text-slate-400">₹{Number(item.old || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                    <span className="text-right text-slate-700 font-medium">₹{Number(item.new || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                  </div>
+                ))}
+
+                <div className="grid grid-cols-3 text-xs font-bold border-t border-slate-200/50 pt-2 text-slate-800">
+                  <span>Gross Salary</span>
+                  <span className="text-right text-slate-400">₹{Number(viewingRevision.old_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                  <span className="text-right text-blue-600">₹{Number(viewingRevision.new_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                </div>
+              </div>
+
+              <div className={`border rounded-2xl p-4 flex items-center justify-between ${
+                Number(viewingRevision.increment_percentage) >= 0
+                  ? 'bg-green-50/50 border-green-100/50'
+                  : 'bg-red-50/50 border-red-100/50'
+              }`}>
+                <div>
+                  <p className={`text-[10px] uppercase font-bold ${
+                    Number(viewingRevision.increment_percentage) >= 0 ? 'text-green-700' : 'text-red-700'
+                  }`}>Increment percentage</p>
+                  <p className={`text-lg font-extrabold ${
+                    Number(viewingRevision.increment_percentage) >= 0 ? 'text-green-800' : 'text-red-800'
+                  }`}>
+                    {Number(viewingRevision.increment_percentage) >= 0 ? '+' : ''}{Number(viewingRevision.increment_percentage).toFixed(2)}%
+                  </p>
+                </div>
+                {viewingRevision.approver && (
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Approved by</p>
+                    <p className="text-xs font-semibold text-slate-700">{viewingRevision.approver.name}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <Button
+                  onClick={() => handleDownload(viewingRevision)}
+                  disabled={downloadingId === viewingRevision.id}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white rounded-xl shadow-sm h-10 gap-1.5"
+                >
+                  {downloadingId === viewingRevision.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                  Download Revision Letter
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setViewModalOpen(false)} className="flex-1 rounded-xl h-10">
+                  Close
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

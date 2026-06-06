@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
-import { Leave, LeaveType, LeaveBalance, ApplyLeavePayload } from '@/types/leave';
+import { Leave, LeaveType, LeaveBalance, ApplyLeavePayload, GroupedEmployeeLeaveBalances } from '@/types/leave';
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -56,10 +56,83 @@ export const useLeaveBalances = (employee_id: number, year?: number) =>
     queryKey: ['leave-balances', employee_id, year],
     queryFn: () =>
       api
-        .get('/leave-balances', { params: { employee_id, year } })
+        .get('/leave-balances', { params: { employee_id, year, per_page: 50 } })
         .then((r) => (Array.isArray(r.data) ? r.data : r.data?.data ?? [])),
     enabled: !!employee_id,
   });
+
+export const useAllLeaveBalances = (params?: {
+  page?: number;
+  per_page?: number;
+  employee_id?: number | string;
+  year?: number;
+  search?: string;
+  department_id?: number;
+  leave_type_id?: number;
+}) =>
+  useQuery<PaginatedResponse<GroupedEmployeeLeaveBalances>>({
+    queryKey: ['all-leave-balances', params],
+    queryFn: () =>
+      api
+        .get('/leave-balances', {
+          params: {
+            page: params?.page ?? 1,
+            per_page: params?.per_page ?? 10,
+            employee_id: params?.employee_id,
+            year: params?.year,
+            search: params?.search,
+            department_id: params?.department_id,
+            leave_type_id: params?.leave_type_id,
+          },
+        })
+        .then((r) => r.data),
+    staleTime: 30 * 1000,
+  });
+
+export const useCreateLeaveType = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Omit<LeaveType, 'id' | 'created_at'>) =>
+      api.post('/leave-types', data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave-types'] });
+      toast.success('Leave type created successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to create leave type');
+    },
+  });
+};
+
+export const useUpdateLeaveType = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: Partial<LeaveType> & { id: number }) =>
+      api.put(`/leave-types/${id}`, data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave-types'] });
+      toast.success('Leave type updated successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to update leave type');
+    },
+  });
+};
+
+export const useDeleteLeaveType = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.delete(`/leave-types/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave-types'] });
+      toast.success('Leave type deleted successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to delete leave type');
+    },
+  });
+};
 
 export const useApplyLeave = () => {
   const queryClient = useQueryClient();
