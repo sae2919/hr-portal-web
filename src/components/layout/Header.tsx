@@ -45,6 +45,7 @@ function getPageTitle(pathname: string, tier: string): string {
     '/onboarding': 'Onboarding',
     '/organization': 'Organization',
     '/mail-templates': 'Mail Templates',
+    '/assets': 'Assets',
   };
 
   for (const key of Object.keys(map)) {

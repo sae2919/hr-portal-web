@@ -202,11 +202,16 @@ export default function SalaryRevisionsPage() {
     }
   };
 
-  const handleHraPercentageChange = (val: string) => {
-    setHraPercentage(val);
-    const percentVal = Number(val) || 0;
+  const handleHraAmountChange = (val: string) => {
+    setNewHra(val);
+    const hraVal = Number(val) || 0;
     const basicVal = Number(newBasic) || 0;
-    setNewHra(String(Math.round((basicVal * percentVal) / 100)));
+    if (basicVal > 0) {
+      const pct = Math.round((hraVal / basicVal) * 100);
+      setHraPercentage(String(pct));
+    } else {
+      setHraPercentage('');
+    }
   };
 
   useEffect(() => {
@@ -385,12 +390,18 @@ export default function SalaryRevisionsPage() {
                     Current Package (CTC)
                   </span>
                   <p className="text-3xl font-extrabold mt-3">
-                    ₹{Number(
-                      (myEmployeeDetails.basic_salary || 0) + 
-                      (myEmployeeDetails.hra || 0) + 
-                      (myEmployeeDetails.total_allowances || myEmployeeDetails.allowances || 0) + 
-                      (myEmployeeDetails.bonus || 0)
-                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+                    ₹{(() => {
+                      const basic = Number(myEmployeeDetails.basic_salary) || 0;
+                      const hra = Number(myEmployeeDetails.hra) || 0;
+                      const allowances = Array.isArray(myEmployeeDetails.allowances)
+                        ? myEmployeeDetails.allowances.reduce((acc: number, item: any) => acc + (Number(item.amount) || 0), 0)
+                        : (Number(myEmployeeDetails.total_allowances || myEmployeeDetails.allowances) || 0);
+                      const bonus = Number(myEmployeeDetails.bonus) || 0;
+                      return (basic + hra + allowances + bonus).toLocaleString('en-IN', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      });
+                    })()}/mo
                   </p>
                   <p className="text-xs text-blue-100 mt-2">
                     Joined on {myEmployeeDetails.joining_date ? String(myEmployeeDetails.joining_date).slice(0, 10) : 'N/A'}
@@ -705,7 +716,24 @@ export default function SalaryRevisionsPage() {
                             <Label className="text-xs font-semibold text-slate-700">New Job Type <span className="text-red-500">*</span></Label>
                             <select
                               value={newEmploymentType}
-                              onChange={(e) => setNewEmploymentType(e.target.value)}
+                              onChange={(e) => {
+                                const nextType = e.target.value;
+                                const prevType = newEmploymentType;
+                                setNewEmploymentType(nextType);
+                                if (prevType === 'intern' && nextType !== 'intern') {
+                                  const stipend = Number(newBasic) || 0;
+                                  if (stipend > 0) {
+                                    const basic = Math.round(stipend * 0.50);
+                                    const hra = Math.round(basic * 0.40);
+                                    const special = Math.max(0, stipend - basic - hra);
+                                    
+                                    setHraPercentage('40');
+                                    setNewBasic(String(basic));
+                                    setNewHra(String(hra));
+                                    setNewAllowances(String(special));
+                                  }
+                                }
+                              }}
                               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                               required
                             >
@@ -802,55 +830,67 @@ export default function SalaryRevisionsPage() {
                         <Label className="text-xs font-semibold text-slate-700">
                           {isIntern ? 'New Stipend' : 'New Basic Salary'} <span className="text-red-500">*</span>
                         </Label>
-                        <Input
-                          type="number"
-                          value={newBasic}
-                          onChange={(e) => handleBasicChange(e.target.value)}
-                          placeholder={isIntern ? "e.g. 15000" : "e.g. 35000"}
-                          className="h-10 border-slate-200 rounded-xl"
-                          required
-                        />
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                          <Input
+                            type="number"
+                            value={newBasic}
+                            onChange={(e) => handleBasicChange(e.target.value)}
+                            placeholder={isIntern ? "e.g. 15000" : "e.g. 35000"}
+                            className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
+                            required
+                          />
+                        </div>
                       </div>
 
                       {!isIntern && (
                         <>
                           <div className="space-y-1.5">
                             <div className="flex justify-between items-center">
-                              <Label className="text-xs font-semibold text-slate-700">New HRA (%) <span className="text-red-500">*</span></Label>
-                              {newHra && <span className="text-[10px] font-bold text-slate-500">₹{Number(newHra).toLocaleString('en-IN')}</span>}
+                              <Label className="text-xs font-semibold text-slate-700">New HRA <span className="text-red-500">*</span></Label>
+                              {hraPercentage && <span className="text-[10px] font-bold text-slate-500">{hraPercentage}% of Basic</span>}
                             </div>
-                            <Input
-                              type="number"
-                              value={hraPercentage}
-                              onChange={(e) => handleHraPercentageChange(e.target.value)}
-                              placeholder="e.g. 40"
-                              className="h-10 border-slate-200 rounded-xl"
-                              required
-                            />
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                              <Input
+                                type="number"
+                                value={newHra}
+                                onChange={(e) => handleHraAmountChange(e.target.value)}
+                                placeholder="e.g. 14000"
+                                className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
+                                required
+                              />
+                            </div>
                           </div>
 
                           <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-700">New Allowances <span className="text-red-500">*</span></Label>
-                            <Input
-                              type="number"
-                              value={newAllowances}
-                              onChange={(e) => setNewAllowances(e.target.value)}
-                              placeholder="e.g. 10000"
-                              className="h-10 border-slate-200 rounded-xl"
-                              required
-                            />
+                            <Label className="text-xs font-semibold text-slate-700">New Special Allowances <span className="text-red-500">*</span></Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                              <Input
+                                type="number"
+                                value={newAllowances}
+                                onChange={(e) => setNewAllowances(e.target.value)}
+                                placeholder="e.g. 10000"
+                                className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
+                                required
+                              />
+                            </div>
                           </div>
 
                           <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-700">New Monthly Bonus <span className="text-red-500">*</span></Label>
-                            <Input
-                              type="number"
-                              value={newBonus}
-                              onChange={(e) => setNewBonus(e.target.value)}
-                              placeholder="e.g. 5000"
-                              className="h-10 border-slate-200 rounded-xl"
-                              required
-                            />
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                              <Input
+                                type="number"
+                                value={newBonus}
+                                onChange={(e) => setNewBonus(e.target.value)}
+                                placeholder="e.g. 5000"
+                                className="h-10 pl-7 border-slate-200 rounded-xl focus:ring-blue-500/20"
+                                required
+                              />
+                            </div>
                           </div>
                         </>
                       )}
@@ -918,7 +958,7 @@ export default function SalaryRevisionsPage() {
       {viewModalOpen && viewingRevision && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewModalOpen(false)} />
-          <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-lg mx-4 p-6 overflow-hidden border border-slate-100 animate-in fade-in duration-200">
+          <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-lg lg:max-w-4xl mx-4 p-6 overflow-hidden border border-slate-100 animate-in fade-in duration-200">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -936,112 +976,118 @@ export default function SalaryRevisionsPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Reason</p>
-                  <p className="text-sm font-semibold text-slate-700 capitalize">{viewingRevision.reason}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Effective Date</p>
-                  <p className="text-sm font-semibold text-slate-700">
-                    {viewingRevision.effective_date ? String(viewingRevision.effective_date).slice(0, 10) : '—'}
-                  </p>
-                </div>
-              </div>
-
-              {viewingRevision.old_employment_type && (
-                <div className="grid grid-cols-2 gap-4 bg-slate-50/50 border border-slate-100 rounded-2xl p-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 font-medium">Old Job Type:</span>{' '}
-                    <strong className="capitalize text-slate-700 font-semibold">{viewingRevision.old_employment_type.replace('_', ' ')}</strong>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Metadata and Transition info */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 bg-slate-50/50 border border-slate-100 rounded-2xl p-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Reason</p>
+                    <p className="text-sm font-semibold text-slate-700 capitalize">{viewingRevision.reason}</p>
                   </div>
-                  <div>
-                    <span className="text-slate-400 font-medium">New Job Type:</span>{' '}
-                    <strong className="capitalize text-blue-600 font-semibold">{viewingRevision.new_employment_type?.replace('_', ' ') || 'N/A'}</strong>
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Effective Date</p>
+                    <p className="text-sm font-semibold text-slate-700">
+                      {viewingRevision.effective_date ? String(viewingRevision.effective_date).slice(0, 10) : '—'}
+                    </p>
                   </div>
                 </div>
-              )}
 
-              {viewingRevision.old_designation && (
-                <div className="grid grid-cols-2 gap-4 bg-amber-50/30 border border-amber-100/50 rounded-2xl p-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 font-medium">Previous Role:</span>{' '}
-                    <strong className="text-slate-700 font-semibold">{viewingRevision.old_designation.title}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium">Promoted Role:</span>{' '}
-                    <strong className="text-amber-700 font-semibold">{viewingRevision.new_designation?.title || 'N/A'}</strong>
-                  </div>
-                </div>
-              )}
-
-              <div className="border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/50 p-4 space-y-3">
-                <div className="grid grid-cols-3 text-xs text-slate-400 font-bold border-b border-slate-200/50 pb-2">
-                  <span>Salary Component</span>
-                  <span className="text-right">Old structure</span>
-                  <span className="text-right">New structure</span>
-                </div>
-                
-                {[
-                  { label: 'Basic / Stipend', old: viewingRevision.old_basic_salary, new: viewingRevision.new_basic_salary },
-                  { label: 'HRA', old: viewingRevision.old_hra, new: viewingRevision.new_hra },
-                  { label: 'Allowances', old: viewingRevision.old_allowances, new: viewingRevision.new_allowances },
-                  { label: 'Bonus', old: viewingRevision.old_bonus, new: viewingRevision.new_bonus },
-                ].map((item) => (
-                  <div key={item.label} className="grid grid-cols-3 text-xs">
-                    <span className="text-slate-500">{item.label}</span>
-                    <span className="text-right text-slate-400">₹{Number(item.old || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
-                    <span className="text-right text-slate-700 font-medium">₹{Number(item.new || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
-                  </div>
-                ))}
-
-                <div className="grid grid-cols-3 text-xs font-bold border-t border-slate-200/50 pt-2 text-slate-800">
-                  <span>Gross Salary</span>
-                  <span className="text-right text-slate-400">₹{Number(viewingRevision.old_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
-                  <span className="text-right text-blue-600">₹{Number(viewingRevision.new_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
-                </div>
-              </div>
-
-              <div className={`border rounded-2xl p-4 flex items-center justify-between ${
-                Number(viewingRevision.increment_percentage) >= 0
-                  ? 'bg-green-50/50 border-green-100/50'
-                  : 'bg-red-50/50 border-red-100/50'
-              }`}>
-                <div>
-                  <p className={`text-[10px] uppercase font-bold ${
-                    Number(viewingRevision.increment_percentage) >= 0 ? 'text-green-700' : 'text-red-700'
-                  }`}>Increment percentage</p>
-                  <p className={`text-lg font-extrabold ${
-                    Number(viewingRevision.increment_percentage) >= 0 ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {Number(viewingRevision.increment_percentage) >= 0 ? '+' : ''}{Number(viewingRevision.increment_percentage).toFixed(2)}%
-                  </p>
-                </div>
-                {viewingRevision.approver && (
-                  <div className="text-right">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Approved by</p>
-                    <p className="text-xs font-semibold text-slate-700">{viewingRevision.approver.name}</p>
+                {viewingRevision.old_employment_type && (
+                  <div className="grid grid-cols-2 gap-4 bg-slate-50/50 border border-slate-100 rounded-2xl p-4 text-xs">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Old Job Type</p>
+                      <strong className="capitalize text-slate-700 font-semibold">{viewingRevision.old_employment_type.replace('_', ' ')}</strong>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">New Job Type</p>
+                      <strong className="capitalize text-blue-600 font-semibold">{viewingRevision.new_employment_type?.replace('_', ' ') || 'N/A'}</strong>
+                    </div>
                   </div>
                 )}
+
+                {viewingRevision.old_designation && (
+                  <div className="grid grid-cols-2 gap-4 bg-amber-50/30 border border-amber-100/50 rounded-2xl p-4 text-xs">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-amber-700 mb-1">Previous Role</p>
+                      <strong className="text-slate-700 font-semibold">{viewingRevision.old_designation.title}</strong>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-amber-700 mb-1">Promoted Role</p>
+                      <strong className="text-amber-700 font-semibold">{viewingRevision.new_designation?.title || 'N/A'}</strong>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`border rounded-2xl p-4 flex items-center justify-between ${
+                  Number(viewingRevision.increment_percentage) >= 0
+                    ? 'bg-green-50/50 border-green-100/50'
+                    : 'bg-red-50/50 border-red-100/50'
+                }`}>
+                  <div>
+                    <p className={`text-[10px] uppercase font-bold ${
+                      Number(viewingRevision.increment_percentage) >= 0 ? 'text-green-700' : 'text-red-700'
+                    }`}>Increment percentage</p>
+                    <p className={`text-lg font-extrabold ${
+                      Number(viewingRevision.increment_percentage) >= 0 ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                      {Number(viewingRevision.increment_percentage) >= 0 ? '+' : ''}{Number(viewingRevision.increment_percentage).toFixed(2)}%
+                    </p>
+                  </div>
+                  {viewingRevision.approver && (
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase font-bold text-slate-400">Approved by</p>
+                      <p className="text-xs font-semibold text-slate-700">{viewingRevision.approver.name}</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-3 pt-3">
-                <Button
-                  onClick={() => handleDownload(viewingRevision)}
-                  disabled={downloadingId === viewingRevision.id}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white rounded-xl shadow-sm h-10 gap-1.5"
-                >
-                  {downloadingId === viewingRevision.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                  Download Revision Letter
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setViewModalOpen(false)} className="flex-1 rounded-xl h-10">
-                  Close
-                </Button>
+              {/* Right Column: Salary component table and actions */}
+              <div className="space-y-4 flex flex-col justify-between h-full">
+                <div className="border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/50 p-4 space-y-3 flex-1">
+                  <div className="grid grid-cols-3 text-xs text-slate-400 font-bold border-b border-slate-200/50 pb-2">
+                    <span>Salary Component</span>
+                    <span className="text-right">Old structure</span>
+                    <span className="text-right">New structure</span>
+                  </div>
+                  
+                  {[
+                    { label: 'Basic / Stipend', old: viewingRevision.old_basic_salary, new: viewingRevision.new_basic_salary },
+                    { label: 'HRA', old: viewingRevision.old_hra, new: viewingRevision.new_hra },
+                    { label: 'Special Allowances', old: viewingRevision.old_allowances, new: viewingRevision.new_allowances },
+                    { label: 'Bonus', old: viewingRevision.old_bonus, new: viewingRevision.new_bonus },
+                  ].map((item) => (
+                    <div key={item.label} className="grid grid-cols-3 text-xs py-0.5">
+                      <span className="text-slate-500">{item.label}</span>
+                      <span className="text-right text-slate-400">₹{Number(item.old || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                      <span className="text-right text-slate-700 font-medium">₹{Number(item.new || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                    </div>
+                  ))}
+
+                  <div className="grid grid-cols-3 text-xs font-bold border-t border-slate-200/50 pt-2 text-slate-800">
+                    <span>Gross Salary</span>
+                    <span className="text-right text-slate-400">₹{Number(viewingRevision.old_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                    <span className="text-right text-blue-600">₹{Number(viewingRevision.new_gross_salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-3 mt-auto">
+                  <Button
+                    onClick={() => handleDownload(viewingRevision)}
+                    disabled={downloadingId === viewingRevision.id}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-white rounded-xl shadow-sm h-10 gap-1.5"
+                  >
+                    {downloadingId === viewingRevision.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    Download Revision Letter
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setViewModalOpen(false)} className="flex-1 rounded-xl h-10">
+                    Close
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

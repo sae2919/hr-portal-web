@@ -10,6 +10,11 @@ import { quoteService } from '@/services/quoteService';
 import { eventService } from '@/services/eventService';
 import { resolveRoleTier } from '@/hooks/useAuth';
 
+// ── Module-level in-memory caches (survive tab switches, reset on full page reload) ──
+let _quoteCache: any = null;
+let _todaySpecialCache: { birthdays: any[]; anniversaries: any[] } | null = null;
+let _upcomingEventsCache: any[] | null = null;
+
 import {
   Users, Clock, Calendar, IndianRupee, TrendingUp, UserCheck,
   AlertCircle, Building2, Loader2, Quote as QuoteIcon, Cake,
@@ -48,13 +53,29 @@ export default function DashboardPage() {
   const [todaySpecial, setTodaySpecial] = useState<{ birthdays: any[]; anniversaries: any[] }>({ birthdays: [], anniversaries: [] });
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (force = false) => {
     if (!isAuthenticated || !token) return;
+    // Check sessionStorage cache (2-minute TTL)
+    if (!force) {
+      try {
+        const cached = sessionStorage.getItem('dash_stats');
+        if (cached) {
+          const { ts, data } = JSON.parse(cached);
+          if (Date.now() - ts < 2 * 60 * 1000) {
+            setStats(data);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch { /* ignore parse errors */ }
+    }
     try {
       setLoading(true);
       setApiError(false);
       const res = await api.get('/dashboard/stats', { timeout: 10000 });
       setStats(res.data);
+      // Store in sessionStorage with timestamp
+      try { sessionStorage.setItem('dash_stats', JSON.stringify({ ts: Date.now(), data: res.data })); } catch { }
     } catch {
       setApiError(true);
       setStats(fallbackStats);
@@ -64,36 +85,51 @@ export default function DashboardPage() {
   }, [token, isAuthenticated]);
 
   const loadDailyQuote = async () => {
+    // Use in-memory cache — quote only needs to change once per browser session
+    if (_quoteCache) { setDailyQuote(_quoteCache); return; }
     try {
       const res = await quoteService.getRandomQuote();
-      setDailyQuote(res.success && res.data ? res.data : fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)]);
+      _quoteCache = res.success && res.data ? res.data : fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+      setDailyQuote(_quoteCache);
     } catch {
-      setDailyQuote(fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)]);
+      _quoteCache = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+      setDailyQuote(_quoteCache);
     }
   };
 
   const loadTodaySpecial = async () => {
+    // Use in-memory cache — birthdays don't change mid-session
+    if (_todaySpecialCache) { setTodaySpecial(_todaySpecialCache); return; }
     try {
       const res = await eventService.getTodaySpecial();
       if (res.success && res.data) {
-        setTodaySpecial({
-          birthdays: res.data.birthdays || [],
-          anniversaries: res.data.anniversaries || [],
-        });
+        _todaySpecialCache = { birthdays: res.data.birthdays || [], anniversaries: res.data.anniversaries || [] };
+      } else {
+        _todaySpecialCache = { birthdays: [], anniversaries: [] };
       }
+      setTodaySpecial(_todaySpecialCache);
     } catch {
-      setTodaySpecial({ birthdays: [], anniversaries: [] });
+      _todaySpecialCache = { birthdays: [], anniversaries: [] };
+      setTodaySpecial(_todaySpecialCache);
     }
   };
 
   const loadUpcomingEvents = async () => {
+    // Use in-memory cache — upcoming events don't change mid-session
+    if (_upcomingEventsCache) { setUpcomingEvents(_upcomingEventsCache); return; }
     try {
       const res = await eventService.getUpcomingEvents();
-      if (res.success && res.data) setUpcomingEvents(res.data.slice(0, 5));
+      const events: any[] = res.success && res.data ? res.data.slice(0, 5) : [];
+      _upcomingEventsCache = events;
+      setUpcomingEvents(events);
     } catch {
+      _upcomingEventsCache = [];
       setUpcomingEvents([]);
     }
   };
+
+  // Retry button passes force=true to bypass cache
+  const handleRetryStats = useCallback(() => loadStats(true), [loadStats]);
 
   useEffect(() => {
     if (!isAuthenticated && token === null) { router.push('/login'); return; }
@@ -103,6 +139,7 @@ export default function DashboardPage() {
     loadDailyQuote();
     loadTodaySpecial();
     loadUpcomingEvents();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadStats, isAuthenticated, tier, user, router, token]);
 
   const getGreeting = () => {
@@ -144,7 +181,7 @@ export default function DashboardPage() {
               <p className="text-sm font-medium text-amber-800">Unable to connect to server</p>
               <p className="text-xs text-amber-600">Showing cached data. Please check your connection.</p>
             </div>
-            <button onClick={() => loadStats()} className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-lg hover:bg-amber-200 transition">
+            <button onClick={handleRetryStats} className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-lg hover:bg-amber-200 transition">
               Retry
             </button>
           </div>

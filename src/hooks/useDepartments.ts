@@ -6,18 +6,22 @@ import {
 
 import api from '@/lib/api';
 
-export const useDepartments = (params?: {
-  page?: number;
-  search?: string;
-  status?: string;
-  per_page?: number;
-}) => {
+export const useDepartments = (
+  params?: {
+    page?: number;
+    search?: string;
+    status?: string;
+    per_page?: number;
+  },
+  options?: { enabled?: boolean }
+) => {
 
   return useQuery({
 
     queryKey: [
       'departments',
-      params,
+      // Normalise undefined params so all "load all" callers share the same cache key
+      params ?? null,
     ],
 
     queryFn: async () => {
@@ -37,6 +41,11 @@ export const useDepartments = (params?: {
 
       return response.data;
     },
+
+    // Explicit cache settings — departments rarely change
+    staleTime: 5 * 60 * 1000,  // 5 minutes
+    gcTime:    10 * 60 * 1000, // keep in cache 10 minutes
+    ...options,
   });
 };
 

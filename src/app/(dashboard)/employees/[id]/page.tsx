@@ -14,7 +14,7 @@ import {
   ArrowLeft, Pencil, Loader2, AlertCircle, User, Mail, Phone,
   Calendar, Building2, Briefcase, FileText, CreditCard,
   Banknote, Shield, Heart, MapPin, Home, FileBadge, Eye, EyeOff, Lock,
-  CheckCircle, XCircle, Copy, ExternalLink
+  CheckCircle, XCircle, Copy, ExternalLink, Laptop
 } from 'lucide-react';
 
 // ── Helper Functions ─────────────────────────────────────────────
@@ -280,6 +280,76 @@ export default function EmployeeDetailPage() {
             </div>
           </SectionCard>
 
+          {/* Allocated Assets */}
+          <SectionCard title="Allocated Assets" icon={Laptop}>
+            {(() => {
+              const assetsList = employee.assets || employee.asset_allocations || (employee as any).assetAllocations;
+              if (assetsList && assetsList.length > 0) {
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-100 text-left select-none">
+                        <tr>
+                          <th className="px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Asset</th>
+                          <th className="px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Serial Number</th>
+                          <th className="px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date Allocated</th>
+                          <th className="px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {assetsList.map((alloc: any) => (
+                          <tr key={alloc.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-slate-800">{alloc.asset?.name || '—'}</p>
+                              <p className="text-xs text-slate-400 font-medium">
+                                {alloc.asset?.asset_code || '—'} {alloc.asset?.brand ? `• ${alloc.asset.brand}` : ''} {alloc.asset?.model ? ` ${alloc.asset.model}` : ''}
+                              </p>
+                              {alloc.asset?.specifications && (
+                                <p className="text-[11px] text-slate-500 mt-1 font-normal max-w-sm whitespace-pre-wrap leading-relaxed">
+                                  <strong>Specs:</strong> {alloc.asset.specifications}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                              {alloc.asset?.serial_number || '—'}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-500">
+                              <div>{formatDate(alloc.allocated_date)}</div>
+                              {alloc.condition_notes && (
+                                <div className="text-[10px] text-slate-400 mt-1 italic max-w-[180px] truncate" title={alloc.condition_notes}>
+                                  Cond: {alloc.condition_notes}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge
+                                variant="outline"
+                                className={`rounded-md font-normal text-xs ${
+                                  alloc.status === 'allocated'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                                }`}
+                              >
+                                {alloc.status === 'allocated' ? 'Assigned' : alloc.status}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              }
+              return (
+                <div className="flex flex-col items-center justify-center py-6 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-100">
+                  <Laptop size={20} className="text-slate-400 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">No assets allocated</p>
+                  <p className="text-[10px] text-slate-400 mt-1">This employee has no registered hardware or inventory items assigned.</p>
+                </div>
+              );
+            })()}
+          </SectionCard>
+
           {/* Emergency Contact */}
           <SectionCard title="Emergency Contact" icon={Heart}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -359,7 +429,7 @@ export default function EmployeeDetailPage() {
                           />
                         ))
                       ) : (
-                        <DetailRow label="Allowances" value={formatCurrency(allowances)} />
+                        <DetailRow label="Special Allowance" value={formatCurrency(allowances)} />
                       )}
                       <DetailRow label="Bonus" value={formatCurrency(employee.bonus)} />
                       <div className="border-t border-slate-100 pt-2 mt-2">
@@ -444,15 +514,33 @@ export default function EmployeeDetailPage() {
           {/* Roles */}
           {showSensitive && (
             <SectionCard title="Roles" icon={Briefcase}>
-              <div className="space-y-1.5">
-                <div className={`flex justify-between items-center py-2 ${employee.previous_designation ? 'border-b border-slate-50' : ''}`}>
-                  <span className="text-sm text-slate-400">Current Role</span>
-                  <span className="text-sm font-medium text-slate-700">{employee.designation?.title || '—'}</span>
+              <div className="space-y-3">
+                <div className={`flex flex-col pb-3 ${employee.previous_designation ? 'border-b border-slate-100' : ''}`}>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-400">Current Role</span>
+                    <span className="text-sm font-medium text-slate-700">{employee.designation?.title || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-slate-400">
+                      {employee.previous_designation ? 'Revised Date' : 'Joining Date'}
+                    </span>
+                    <span className="text-xs font-normal text-slate-500">
+                      {formatDate(employee.designation_revised_date)}
+                    </span>
+                  </div>
                 </div>
                 {employee.previous_designation && (
-                  <div className="flex justify-between items-center py-2 last:border-0">
-                    <span className="text-sm text-slate-400">Previous Role</span>
-                    <span className="text-sm font-medium text-slate-700">{employee.previous_designation}</span>
+                  <div className="flex flex-col pt-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-400">Previous Role</span>
+                      <span className="text-sm font-medium text-slate-700">{employee.previous_designation}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs text-slate-400">Joining Date</span>
+                      <span className="text-xs font-normal text-slate-500">
+                        {formatDate(employee.previous_designation_joining_date)}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

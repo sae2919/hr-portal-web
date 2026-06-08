@@ -21,14 +21,14 @@ import { Department } from '@/types/department';
 import { Designation } from '@/types/designation';
 
 const PT_SLABS: Record<string, { upTo: number; pt: number }[]> = {
-  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
-  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: 25000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: 20000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
   'Maharashtra':       [{ upTo: 7500,  pt: 0 }, { upTo: 10000, pt: 175 }, { upTo: Infinity, pt: 200 }],
   'Tamil Nadu':        [{ upTo: 21000, pt: 0 }, { upTo: Infinity, pt: 208 }],
   'West Bengal':       [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 110 }, { upTo: 25000, pt: 130 }, { upTo: 40000, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Gujarat':           [{ upTo: 5999,  pt: 0 }, { upTo: 8999, pt: 80 }, { upTo: 11999, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Madhya Pradesh':    [{ upTo: 18750, pt: 0 }, { upTo: Infinity, pt: 208 }],
-  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
+  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: 20000, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Kerala':            [{ upTo: 11999, pt: 0 }, { upTo: 17999, pt: 120 }, { upTo: 29999, pt: 180 }, { upTo: Infinity, pt: 208 }],
   'Assam':             [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 150 }, { upTo: 25000, pt: 180 }, { upTo: Infinity, pt: 208 }],
   'Bihar':             [{ upTo: 25000, pt: 0 }, { upTo: Infinity, pt: 208 }],
@@ -240,7 +240,7 @@ export default function CreateEmployeePage() {
       setAllowancesState({
         transport: false, food: false, medical: false, special: false, other: false,
       });
-    } else if (employmentType === 'full_time') {
+    } else {
       if (!watch('pt_state')) {
         setValue('pt_state', 'Telangana', { shouldValidate: true });
       }

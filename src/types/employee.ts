@@ -46,6 +46,8 @@ export interface Employee {
   ctc?: number;
   created_at: string;
   previous_designation?: string | null;
+  designation_revised_date?: string | null;
+  previous_designation_joining_date?: string | null;
 }
 
 export interface StoreEmployeePayload {

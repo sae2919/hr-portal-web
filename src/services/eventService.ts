@@ -68,6 +68,16 @@ export interface WishPayload {
 // ─── Fallback ─────────────────────────────────────────────────────────────────
 const fallbackEvents: Event[] = [];
 
+// ─── Session-level caches with Promise deduplication ─────────────────────────
+// Prevents multiple simultaneous callers (React StrictMode, BirthdayNotification + Dashboard)
+// from firing duplicate network requests for the same data.
+type TodaySpecialResult = { success: boolean; data: TodaySpecial };
+let _todaySpecialCache: TodaySpecialResult | null = null;
+let _todaySpecialPending: Promise<TodaySpecialResult> | null = null;
+
+let _upcomingEventsCache: any | null = null;
+let _upcomingEventsPending: Promise<any> | null = null;
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 export const eventService = {
 
@@ -84,23 +94,29 @@ export const eventService = {
   },
 
   getUpcomingEvents: async () => {
-    try {
-      const response = await api.get('/events/upcoming', { timeout: 10000 });
-      return response.data;
-    } catch (error) {
-      console.error('Failed to fetch upcoming events:', error);
-      return { success: true, data: [] };
+    // Return cached result immediately
+    if (_upcomingEventsCache) return _upcomingEventsCache;
+    // Deduplicate concurrent calls
+    if (!_upcomingEventsPending) {
+      _upcomingEventsPending = api.get('/events/upcoming', { timeout: 10000 })
+        .then(r => { _upcomingEventsCache = r.data; return r.data; })
+        .catch(() => { const fallback = { success: true, data: [] }; _upcomingEventsCache = fallback; return fallback; })
+        .finally(() => { _upcomingEventsPending = null; });
     }
+    return _upcomingEventsPending;
   },
 
   getTodaySpecial: async (): Promise<{ success: boolean; data: TodaySpecial }> => {
-    try {
-      const response = await api.get('/events/today-special', { timeout: 10000 });
-      return response.data;
-    } catch (error) {
-      console.error('Failed to fetch today special:', error);
-      return { success: true, data: { birthdays: [], anniversaries: [] } };
+    // Return cached result immediately
+    if (_todaySpecialCache) return _todaySpecialCache;
+    // Deduplicate concurrent calls — all callers await the same in-flight request
+    if (!_todaySpecialPending) {
+      _todaySpecialPending = api.get('/events/today-special', { timeout: 10000 })
+        .then(r => { _todaySpecialCache = r.data; return r.data; })
+        .catch(() => { const fallback = { success: true, data: { birthdays: [], anniversaries: [] } }; _todaySpecialCache = fallback; return fallback; })
+        .finally(() => { _todaySpecialPending = null; });
     }
+    return _todaySpecialPending;
   },
 
   getUpcomingBirthdays: async (days: number = 30) => {

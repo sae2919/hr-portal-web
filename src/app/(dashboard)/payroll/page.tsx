@@ -10,6 +10,13 @@ import type {
   GeneratePayrollPayload,
 } from '@/types/payroll';
 
+// ── Module-level caches — survive tab navigation, reset on browser refresh ──
+let _payrollEmployeeCache: Employee[] | null = null;
+let _payrollEmployeePending: Promise<Employee[]> | null = null;
+let _payrollDeptCache: { id: number; name: string }[] | null = null;
+let _payrollDeptPending: Promise<{ id: number; name: string }[]> | null = null;
+let _payrollSettingsCache: { pf_percentage: number; company_name?: string } | null = null;
+
 import {
   IndianRupee, CheckCircle2, Clock, Mail, Loader2, Send,
   Check, X, FileText, Plus, ChevronDown, ChevronUp,
@@ -84,14 +91,14 @@ function amountInWords(net: number): string {
 }
 
 const PT_SLABS: Record<string, { upTo: number; pt: number }[]> = {
-  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
-  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: 25000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: 20000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
   'Maharashtra':       [{ upTo: 7500,  pt: 0 }, { upTo: 10000, pt: 175 }, { upTo: Infinity, pt: 200 }],
   'Tamil Nadu':        [{ upTo: 21000, pt: 0 }, { upTo: Infinity, pt: 208 }],
   'West Bengal':       [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 110 }, { upTo: 25000, pt: 130 }, { upTo: 40000, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Gujarat':           [{ upTo: 5999,  pt: 0 }, { upTo: 8999, pt: 80 }, { upTo: 11999, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Madhya Pradesh':    [{ upTo: 18750, pt: 0 }, { upTo: Infinity, pt: 208 }],
-  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
+  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: 20000, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Kerala':            [{ upTo: 11999, pt: 0 }, { upTo: 17999, pt: 120 }, { upTo: 29999, pt: 180 }, { upTo: Infinity, pt: 208 }],
   'Assam':             [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 150 }, { upTo: 25000, pt: 180 }, { upTo: Infinity, pt: 208 }],
   'Bihar':             [{ upTo: 25000, pt: 0 }, { upTo: Infinity, pt: 208 }],
@@ -190,7 +197,14 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
   });
 
   // Deduction rows
+  const lopDeduction = Number(payroll.lop_deduction || 0);
   const rightRows: Array<{ label: string; actual: number | null }> = [];
+
+  // Always show LOP Deduction first if there are any LOP days
+  if (lopDeduction > 0) {
+    rightRows.push({ label: 'LOP', actual: lopDeduction });
+  }
+
   if (!isIntern) {
     deductions.forEach(item => {
       let label = item.name;
@@ -202,6 +216,11 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
 
     if (rightRows.length === 0) {
       rightRows.push({ label: 'Prof Tax', actual: 0 });
+    }
+  } else {
+    // For interns, show LOP only if non-zero — already pushed above
+    if (lopDeduction === 0) {
+      rightRows.push({ label: '—', actual: null });
     }
   }
 
@@ -330,8 +349,8 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
                   <table className="w-full border-collapse">
                     <tbody>
                       <tr>
-                        <td className="w-[45%] py-0.5 border-none font-normal text-gray-500">Employee ID:</td>
-                        <td className="py-0.5 border-none font-normal">{payroll.employee.employee_id || String(payroll.employee.id)}</td>
+                        <td className="w-[45%] py-0.5 border-none font-normal text-gray-500">Employee Code:</td>
+                        <td className="py-0.5 border-none font-normal">{(payroll.employee as any).employee_code || payroll.employee.employee_id || String(payroll.employee.id)}</td>
                       </tr>
                       <tr>
                         <td className="py-0.5 border-none font-normal text-gray-500">Bank Name:</td>
@@ -363,7 +382,7 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
                       </tr>
                       <tr>
                         <td className="py-0.5 border-none font-normal text-gray-500">LOP:</td>
-                        <td className="py-0.5 border-none font-normal">{payroll.lop_days}</td>
+                        <td className="py-0.5 border-none font-normal">{Math.round(Number(payroll.lop_days))}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -401,7 +420,7 @@ function PayslipModal({ payroll, items, companyName, onClose }: {
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(masterGross)}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.gross_salary)}</td>
                 <td className="border border-gray-400 px-2 py-1">Total Deductions:INR.</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">{fmt(payroll.total_deductions)}</td>
+                <td className="border border-gray-400 px-2 py-1 text-right">{fmt(Number(payroll.total_deductions) + lopDeduction)}</td>
               </tr>
             </tbody>
           </table>
@@ -959,31 +978,53 @@ export default function PayrollPage() {
   }
 
   useEffect(() => {
-    // Load user data
+    // Load user data (only once — drives loadingUser flag)
     api.get('/user').then(r => setUser(r.data)).catch(console.error).finally(() => setLoadingUser(false));
-    
-    // Load settings
-    api.get('/settings').then(r => {
-      const pct = parseFloat(r.data?.pf_percentage ?? '0');
-      setGlobalPfPct(pct);
-      setGenForm(f => ({ ...f, pf_percentage: pct }));
-      
-      const name = r.data?.company_name;
-      if (name) {
-        setCompanyName(name);
-        localStorage.setItem('company_name', name);
-      }
-    }).catch(() => {});
-    
-    // Load employees and departments for admin filters
-    if (isAdmin) {
-      api.get('/employees', { params: { per_page: 500 } }).then(r => {
-        setEmployees(r.data.data ?? []);
-      }).catch(console.error);
-      
-      api.get('/departments', { params: { per_page: 100 } }).then(r => {
-        setDepartments(r.data.data ?? []);
-      }).catch(console.error);
+
+    // Load settings — module-level cache so we never re-fetch between page navigations
+    if (_payrollSettingsCache) {
+      setGlobalPfPct(_payrollSettingsCache.pf_percentage);
+      setGenForm(f => ({ ...f, pf_percentage: _payrollSettingsCache!.pf_percentage }));
+      if (_payrollSettingsCache.company_name) setCompanyName(_payrollSettingsCache.company_name);
+    } else {
+      api.get('/settings').then(r => {
+        const pct = parseFloat(r.data?.pf_percentage ?? '0');
+        const name = r.data?.company_name;
+        _payrollSettingsCache = { pf_percentage: pct, company_name: name };
+        setGlobalPfPct(pct);
+        setGenForm(f => ({ ...f, pf_percentage: pct }));
+        if (name) { setCompanyName(name); localStorage.setItem('company_name', name); }
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load employees + departments for admin filter dropdowns
+  // Module-level cache — concurrent callers share one request, result survives navigation
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    if (_payrollEmployeeCache) {
+      setEmployees(_payrollEmployeeCache);
+    } else if (!_payrollEmployeePending) {
+      _payrollEmployeePending = api.get('/employees', { params: { per_page: 500 } })
+        .then(r => { const d = r.data.data ?? []; _payrollEmployeeCache = d; setEmployees(d); return d; })
+        .catch(e => { console.error(e); return []; })
+        .finally(() => { _payrollEmployeePending = null; });
+    } else {
+      // Already fetching — attach to the pending promise
+      _payrollEmployeePending.then(d => setEmployees(d));
+    }
+
+    if (_payrollDeptCache) {
+      setDepartments(_payrollDeptCache);
+    } else if (!_payrollDeptPending) {
+      _payrollDeptPending = api.get('/departments', { params: { per_page: 100 } })
+        .then(r => { const d = r.data.data ?? []; _payrollDeptCache = d; setDepartments(d); return d; })
+        .catch(e => { console.error(e); return []; })
+        .finally(() => { _payrollDeptPending = null; });
+    } else {
+      _payrollDeptPending.then(d => setDepartments(d));
     }
   }, [isAdmin]);
 

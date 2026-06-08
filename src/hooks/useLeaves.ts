@@ -15,7 +15,7 @@ export interface PaginatedResponse<T> {
 
 const KEY = 'leaves';
 
-export const useLeaveTypes = () =>
+export const useLeaveTypes = (options?: { enabled?: boolean }) =>
   useQuery<LeaveType[]>({
     queryKey: ['leave-types'],
     queryFn: () =>
@@ -23,17 +23,21 @@ export const useLeaveTypes = () =>
         Array.isArray(r.data) ? r.data : r.data?.data ?? []
       ),
     staleTime: 5 * 60 * 1000,
+    ...options,
   });
 
-export const useLeaves = (params?: {
-  page?: number;
-  per_page?: number;
-  status?: string;
-  employee_id?: number;
-  department_id?: number;
-  leave_type_id?: number;
-  team_lead_status?: string;
-}) =>
+export const useLeaves = (
+  params?: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+    employee_id?: number;
+    department_id?: number;
+    leave_type_id?: number;
+    team_lead_status?: string;
+  },
+  options?: { enabled?: boolean }
+) =>
   useQuery<PaginatedResponse<Leave>>({
     queryKey: [KEY, params],
     queryFn: () =>
@@ -48,28 +52,37 @@ export const useLeaves = (params?: {
           team_lead_status: params?.team_lead_status,
         },
       }).then((r) => r.data),
-    staleTime: 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    ...options,
   });
 
-export const useLeaveBalances = (employee_id: number, year?: number) =>
+export const useLeaveBalances = (
+  employee_id: number,
+  year?: number,
+  options?: { enabled?: boolean }
+) =>
   useQuery<LeaveBalance[]>({
     queryKey: ['leave-balances', employee_id, year],
     queryFn: () =>
       api
         .get('/leave-balances', { params: { employee_id, year, per_page: 50 } })
         .then((r) => (Array.isArray(r.data) ? r.data : r.data?.data ?? [])),
-    enabled: !!employee_id,
+    enabled: !!employee_id && (options?.enabled !== false),
+    ...options,
   });
 
-export const useAllLeaveBalances = (params?: {
-  page?: number;
-  per_page?: number;
-  employee_id?: number | string;
-  year?: number;
-  search?: string;
-  department_id?: number;
-  leave_type_id?: number;
-}) =>
+export const useAllLeaveBalances = (
+  params?: {
+    page?: number;
+    per_page?: number;
+    employee_id?: number | string;
+    year?: number;
+    search?: string;
+    department_id?: number;
+    leave_type_id?: number;
+  },
+  options?: { enabled?: boolean }
+) =>
   useQuery<PaginatedResponse<GroupedEmployeeLeaveBalances>>({
     queryKey: ['all-leave-balances', params],
     queryFn: () =>
@@ -87,6 +100,7 @@ export const useAllLeaveBalances = (params?: {
         })
         .then((r) => r.data),
     staleTime: 30 * 1000,
+    ...options,
   });
 
 export const useCreateLeaveType = () => {
@@ -111,6 +125,8 @@ export const useUpdateLeaveType = () => {
       api.put(`/leave-types/${id}`, data).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leave-types'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['all-leave-balances'] });
       toast.success('Leave type updated successfully');
     },
     onError: (error: any) => {
@@ -126,6 +142,8 @@ export const useDeleteLeaveType = () => {
       api.delete(`/leave-types/${id}`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leave-types'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['all-leave-balances'] });
       toast.success('Leave type deleted successfully');
     },
     onError: (error: any) => {

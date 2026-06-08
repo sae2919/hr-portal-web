@@ -18,14 +18,14 @@ import {
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const PT_SLABS: Record<string, { upTo: number; pt: number }[]> = {
-  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
-  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: 25000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Andhra Pradesh':    [{ upTo: 15000, pt: 0 }, { upTo: 20000, pt: 150 }, { upTo: Infinity, pt: 200 }],
+  'Karnataka':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
   'Maharashtra':       [{ upTo: 7500,  pt: 0 }, { upTo: 10000, pt: 175 }, { upTo: Infinity, pt: 200 }],
   'Tamil Nadu':        [{ upTo: 21000, pt: 0 }, { upTo: Infinity, pt: 208 }],
   'West Bengal':       [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 110 }, { upTo: 25000, pt: 130 }, { upTo: 40000, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Gujarat':           [{ upTo: 5999,  pt: 0 }, { upTo: 8999, pt: 80 }, { upTo: 11999, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Madhya Pradesh':    [{ upTo: 18750, pt: 0 }, { upTo: Infinity, pt: 208 }],
-  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: Infinity, pt: 200 }],
+  'Telangana':         [{ upTo: 15000, pt: 0 }, { upTo: 20000, pt: 150 }, { upTo: Infinity, pt: 200 }],
   'Kerala':            [{ upTo: 11999, pt: 0 }, { upTo: 17999, pt: 120 }, { upTo: 29999, pt: 180 }, { upTo: Infinity, pt: 208 }],
   'Assam':             [{ upTo: 10000, pt: 0 }, { upTo: 15000, pt: 150 }, { upTo: 25000, pt: 180 }, { upTo: Infinity, pt: 208 }],
   'Bihar':             [{ upTo: 25000, pt: 0 }, { upTo: Infinity, pt: 208 }],
@@ -455,6 +455,13 @@ export default function EditEmployeePage() {
       setHraPercentage(0);
       setEsiEnabled(false);
       setTdsEnabled(false);
+    } else {
+      setFormData(prev => {
+        if (!prev.pt_state) {
+          return { ...prev, pt_state: 'Telangana' };
+        }
+        return prev;
+      });
     }
   }, [formData.employment_type]);
 
@@ -497,6 +504,41 @@ export default function EditEmployeePage() {
       const basicVal = Number(value) || 0;
       const calculatedHra = Math.round((basicVal * hraPercentage) / 100);
       setFormData(prev => ({ ...prev, basic_salary: basicVal, hra: calculatedHra }));
+    } else if (field === 'employment_type') {
+      const prevType = formData.employment_type;
+      const nextType = value;
+      setFormData(prev => {
+        const updated = { ...prev, employment_type: nextType };
+        if (prevType === 'intern' && nextType !== 'intern') {
+          const stipend = prev.basic_salary || 0;
+          if (stipend > 0) {
+            const basic = Math.round(stipend * 0.50);
+            const hra = Math.round(basic * 0.40);
+            const special = Math.max(0, stipend - basic - hra);
+            
+            setHraPercentage(40);
+            setAllowancesState({
+              transport: false,
+              food: false,
+              medical: false,
+              special: special > 0,
+              other: false,
+            });
+            
+            updated.basic_salary = basic;
+            updated.hra = hra;
+            updated.allowances = special > 0 ? [{ type: 'special', amount: special }] : [];
+            
+            const gross = basic + hra + special;
+            const computedEsiEmployer = esiEnabled && gross <= 21000 ? Math.round(gross * 0.0325) : 0;
+            const computedPfDeduction = Math.round((gross * (prev.pf_percentage || 0)) / 100);
+            const computedMonthlyCtc = gross + computedEsiEmployer + computedPfDeduction;
+            updated.ctc = computedMonthlyCtc;
+            setCtcInput(String(computedMonthlyCtc * 12));
+          }
+        }
+        return updated;
+      });
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }

@@ -126,7 +126,7 @@ function ApplyLeaveModal({
             <select {...register('leave_type_id', { valueAsNumber: true })}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
               <option value="">Select type</option>
-              {leaveTypes.map((t) => (
+              {leaveTypes.filter(t => t.status === 'active').map((t) => (
                 <option key={t.id} value={t.id}>{t.name}{t.days_per_year ? ` (${t.days_per_year}d/yr)` : ''}</option>
               ))}
             </select>
@@ -413,6 +413,7 @@ export default function LeavesPage() {
   const [rejectModal, setRejectModal] = useState<{ leave: Leave; mode: 'hr' | 'teamlead' } | null>(null);
   const [mounted, setMounted]         = useState(false);
   const [tab, setTab] = useState('my_leaves');
+  const [loadFilters, setLoadFilters] = useState(false);
 
   // Leave balances state
   const [balancePage, setBalancePage] = useState(1);
@@ -447,7 +448,9 @@ export default function LeavesPage() {
   // Fetch current user's leave balances if they have a linked employee_id
   const myEmployeeId = user?.employee_id;
   const { data: myBalances = [], isLoading: isLoadingMyBalances } = useLeaveBalances(
-    myEmployeeId ? Number(myEmployeeId) : 0
+    myEmployeeId ? Number(myEmployeeId) : 0,
+    undefined,
+    { enabled: mounted && !!myEmployeeId && tab === 'my_leaves' }
   );
   const canHRApprove  = isAdmin;
   const canHRReject   = isAdmin;
@@ -462,6 +465,8 @@ export default function LeavesPage() {
     leave_type_id:    filterType ? Number(filterType) : undefined,
     team_lead_status: filterTL || undefined,
     employee_id:      (isAdmin && tab === 'my_leaves') || (isTeamLead && tab === 'team_leaves') ? undefined : (user?.employee_id ?? undefined),
+  }, {
+    enabled: mounted,
   });
 
   let leaves = Array.isArray(leavesResponse) ? leavesResponse : leavesResponse?.data ?? [];
@@ -470,8 +475,8 @@ export default function LeavesPage() {
   }
   const meta   = (!Array.isArray(leavesResponse) && leavesResponse?.meta) ? leavesResponse.meta : null;
 
-  const { data: leaveTypes = [] }     = useLeaveTypes();
-  const { data: departmentsResponse } = useDepartments();
+  const { data: leaveTypes = [] }     = useLeaveTypes({ enabled: tab === 'leave_types' || loadFilters });
+  const { data: departmentsResponse } = useDepartments(undefined, { enabled: tab === 'leave_balances' || loadFilters });
   const departments = Array.isArray(departmentsResponse?.data) ? departmentsResponse.data : [];
 
   const { data: balancesResponse, isLoading: isLoadingBalances } = useAllLeaveBalances({
@@ -480,6 +485,8 @@ export default function LeavesPage() {
     search: balanceSearch || undefined,
     department_id: balanceDept ? Number(balanceDept) : undefined,
     leave_type_id: balanceType ? Number(balanceType) : undefined,
+  }, {
+    enabled: tab === 'leave_balances',
   });
 
   const balances = balancesResponse?.data ?? [];
@@ -489,6 +496,7 @@ export default function LeavesPage() {
   const { mutate: tlApprove }    = useTeamLeadApprove();
   const { mutate: deleteLeave }  = useDeleteLeave();
   const { mutate: deleteLeaveType } = useDeleteLeaveType();
+  const { mutate: updateLeaveType } = useUpdateLeaveType();
 
   const handleDeleteLeaveType = (id: number) => {
     if (confirm('Are you sure you want to delete this leave type?')) {
@@ -638,7 +646,11 @@ export default function LeavesPage() {
       ) : tab === 'leave_balances' ? (
         <div className="space-y-4 animate-in fade-in duration-300">
           {/* Search and filters for Leave Balances */}
-          <div className="flex gap-3 flex-wrap">
+          <div
+            className="flex gap-3 flex-wrap"
+            onMouseEnter={() => setLoadFilters(true)}
+            onFocusCapture={() => setLoadFilters(true)}
+          >
             <Input
               placeholder="Search employee name or code..."
               value={balanceSearch}
@@ -867,9 +879,27 @@ export default function LeavesPage() {
                         </Badge>
                       </td>
                       <td className="px-5 py-4">
-                        <Badge className={t.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}>
-                          {t.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newStatus = t.status === 'active' ? 'inactive' : 'active';
+                              updateLeaveType({ id: t.id, status: newStatus });
+                            }}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-blue-500/30 ${
+                              t.status === 'active' ? 'bg-emerald-500' : 'bg-slate-200'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                                t.status === 'active' ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                          <span className={`text-xs font-semibold ${t.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {t.status === 'active' ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-1">
@@ -960,7 +990,11 @@ export default function LeavesPage() {
           )}
 
           {/* Filters */}
-          <div className="flex gap-3 flex-wrap">
+          <div
+            className="flex gap-3 flex-wrap"
+            onMouseEnter={() => setLoadFilters(true)}
+            onFocusCapture={() => setLoadFilters(true)}
+          >
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
               className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-10 bg-white focus:outline-none">
               <option value="">All Status</option>
@@ -1216,12 +1250,14 @@ export default function LeavesPage() {
       )}
 
       {/* Modals */}
-      <ApplyLeaveModal
-        open={applyOpen}
-        onClose={() => setApplyOpen(false)}
-        currentEmployeeId={user?.employee_id ?? undefined}
-        isAdmin={isAdmin}
-      />
+      {applyOpen && (
+        <ApplyLeaveModal
+          open={applyOpen}
+          onClose={() => setApplyOpen(false)}
+          currentEmployeeId={user?.employee_id ?? undefined}
+          isAdmin={isAdmin}
+        />
+      )}
       <RejectModal
         leave={rejectModal?.leave ?? null}
         mode={rejectModal?.mode ?? 'hr'}
