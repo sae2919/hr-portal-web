@@ -6,7 +6,7 @@ import {
 import api from '@/lib/api';
 import { MailTemplate, StoreMailTemplatePayload, UpdateMailTemplatePayload } from '@/types/mailTemplate';
 
-export const useMailTemplates = (params?: { search?: string }) => {
+export const useMailTemplates = (params?: { search?: string; type?: string }) => {
   return useQuery<MailTemplate[]>({
     queryKey: ['mail-templates', params],
     queryFn: async () => {

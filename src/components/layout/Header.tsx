@@ -44,7 +44,7 @@ function getPageTitle(pathname: string, tier: string): string {
     '/quotes': 'Quotes',
     '/onboarding': 'Onboarding',
     '/organization': 'Organization',
-    '/mail-templates': 'Mail Templates',
+    '/mail-templates': 'Templates',
     '/assets': 'Assets',
   };
 

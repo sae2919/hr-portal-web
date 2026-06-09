@@ -38,7 +38,7 @@ function ResetPasswordForm() {
 
   const [branding, setBranding] = useState({
     name: 'Techsprout',
-    logo: '/logo.png',
+    logo: '/logo-brand.png',
   });
 
   useEffect(() => {
@@ -48,7 +48,7 @@ function ResetPasswordForm() {
       if (cachedName || cachedLogo) {
         setBranding({
           name: cachedName || 'Techsprout',
-          logo: cachedLogo || '/logo.png',
+          logo: cachedLogo || '/logo-brand.png',
         });
       }
     }

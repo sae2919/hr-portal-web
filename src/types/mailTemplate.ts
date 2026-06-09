@@ -1,6 +1,7 @@
 export interface MailTemplate {
   id: number;
   template_name: string;
+  type?: string;
   subject: string;
   body: string | null;
   style: string | null;
@@ -11,6 +12,7 @@ export interface MailTemplate {
 
 export interface StoreMailTemplatePayload {
   template_name: string;
+  type?: string;
   subject: string;
   body?: string;
   style?: string;

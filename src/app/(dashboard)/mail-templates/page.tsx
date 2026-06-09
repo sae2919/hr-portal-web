@@ -25,11 +25,15 @@ import {
   AlertCircle,
   Code,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from 'lucide-react';
+
+type TemplateType = 'mail' | 'payslip' | 'offer_joining' | 'exit_relieving';
 
 export default function MailTemplatesPage() {
   const [search, setSearch] = useState('');
+  const [templateType, setTemplateType] = useState<TemplateType>('mail');
   const [selectedTemplate, setSelectedTemplate] = useState<MailTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
@@ -44,8 +48,8 @@ export default function MailTemplatesPage() {
   // Error & validation states
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  // Query & Mutations
-  const { data: templates = [], isLoading, refetch } = useMailTemplates({ search });
+  // Query & Mutations - filter by search and template type
+  const { data: templates = [], isLoading, refetch } = useMailTemplates({ search, type: templateType });
   const createMutation = useCreateMailTemplate();
   const updateMutation = useUpdateMailTemplate();
   const deleteMutation = useDeleteMailTemplate();
@@ -66,6 +70,14 @@ export default function MailTemplatesPage() {
     }
   }, [selectedTemplate, isCreating]);
 
+  // Handle category tab change
+  const handleTabChange = (type: TemplateType) => {
+    setTemplateType(type);
+    setSelectedTemplate(null);
+    setIsCreating(false);
+    setSearch('');
+  };
+
   // Handle clicking "+ New Template"
   const handleNewTemplate = () => {
     setIsCreating(true);
@@ -73,7 +85,9 @@ export default function MailTemplatesPage() {
     setTemplateName('');
     setSubject('');
     setBody('');
-    setStyle(`body {
+    
+    if (templateType === 'mail') {
+      setStyle(`body {
   font-family: Arial, sans-serif;
   background-color: #f4f4f4;
   margin: 0;
@@ -104,9 +118,97 @@ export default function MailTemplatesPage() {
   font-size: 12px;
   color: #777777;
   margin-top: 20px;
-  border-t: 1px solid #eeeeee;
+  border-top: 1px solid #eeeeee;
   padding-top: 10px;
 }`);
+    } else if (templateType === 'payslip') {
+      setStyle(`body {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11px;
+  color: #000;
+  line-height: 1.4;
+  padding: 10px;
+}
+.header-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.company-name {
+  font-size: 16px;
+  font-weight: bold;
+}
+.payslip-title {
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+  margin: 15px 0;
+}
+.employee-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #777;
+}
+.salary-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #777;
+}
+.salary-table th {
+  border: 1px solid #777;
+  padding: 5px;
+  font-weight: bold;
+  text-align: center;
+}
+.salary-table td {
+  border: 1px solid #777;
+  padding: 4px;
+}
+.amount {
+  text-align: right;
+}`);
+    } else { // offer_joining and exit_relieving
+      setStyle(`@page {
+  margin: 125px 37pt 60px 37pt;
+}
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11pt;
+  color: #000000;
+  line-height: 1.45;
+}
+.header {
+  position: fixed;
+  top: -100px;
+  left: 0;
+  right: 0;
+  height: 80px;
+  border-bottom: 1.5pt solid #28326e;
+  padding-bottom: 8px;
+}
+.company-address {
+  font-size: 10pt;
+  color: #28326e;
+  text-align: right;
+}
+.paragraph {
+  margin-bottom: 8px;
+  text-align: justify;
+}
+.section-title {
+  font-size: 11pt;
+  font-weight: bold;
+  margin-top: 12px;
+  margin-bottom: 3px;
+}
+.page-break {
+  page-break-after: always;
+}
+.signature-section {
+  margin-top: 20px;
+  page-break-inside: avoid;
+}`);
+    }
+    
     setActiveStatus(1);
     setActiveTab('edit');
     setValidationErrors({});
@@ -143,11 +245,11 @@ export default function MailTemplatesPage() {
     if (!templateName.trim()) {
       errors.template_name = 'Template name is required';
     } else if (!/^[a-zA-Z0-9_]+$/.test(templateName)) {
-      errors.template_name = 'Template name must contain only letters, numbers, and underscores (e.g. leave_approved)';
+      errors.template_name = 'Template name must contain only letters, numbers, and underscores';
     }
 
     if (!subject.trim()) {
-      errors.subject = 'Subject is required';
+      errors.subject = 'Subject/Title is required';
     }
 
     setValidationErrors(errors);
@@ -160,6 +262,7 @@ export default function MailTemplatesPage() {
 
     const payload = {
       template_name: templateName,
+      type: templateType,
       subject: subject,
       body: body,
       style: style,
@@ -227,22 +330,81 @@ export default function MailTemplatesPage() {
     }
   };
 
+  // Dynamic tags helper based on active category
+  const getPlaceholderTags = () => {
+    switch (templateType) {
+      case 'payslip':
+        return [
+          { label: 'Employee Name', tag: 'employee_name' },
+          { label: 'Employee Code', tag: 'employee_code' },
+          { label: 'Month Name', tag: 'month' },
+          { label: 'Year', tag: 'year' },
+          { label: 'Net Salary', tag: 'net_salary' },
+          { label: 'Present Days', tag: 'present_days' },
+          { label: 'LOP Days', tag: 'lop_days' },
+        ];
+      case 'offer_joining':
+        return [
+          { label: 'Candidate Name', tag: 'candidate_name' },
+          { label: 'Position Title', tag: 'position' },
+          { label: 'Duration', tag: 'duration' },
+          { label: 'Joining Date', tag: 'joining_date' },
+          { label: 'Stipend/CTC', tag: 'stipend' },
+          { label: 'Letter Date', tag: 'letter_date' },
+          { label: 'Acceptance Date', tag: 'acceptance_date' },
+        ];
+      case 'exit_relieving':
+        return [
+          { label: 'Employee Name', tag: 'employee_name' },
+          { label: 'Designation', tag: 'designation' },
+          { label: 'Date of Joining', tag: 'joining_date' },
+          { label: 'Last Working Day', tag: 'last_working_day' },
+          { label: 'Employee Code', tag: 'employee_code' },
+          { label: 'Salutation (Mr/Ms)', tag: 'salutation' },
+        ];
+      default:
+        return [
+          { label: 'Name', tag: 'name' },
+          { label: 'Employee Name', tag: 'employee_name' },
+          { label: 'OTP Code', tag: 'otp' },
+          { label: 'Reporting To', tag: 'reporting_to' },
+          { label: 'Leave Type', tag: 'leave_type' },
+          { label: 'Leave Dates', tag: 'leave_dates' },
+          { label: 'Payslip Month', tag: 'payslip_month' },
+          { label: 'Login URL', tag: 'login_url' },
+          { label: 'Current Date', tag: 'current_date' },
+        ];
+    }
+  };
+
   // Generate dynamic Preview content inside iframe
   const renderPreview = () => {
     let html = body;
 
     // Get company branding details matching Sidebar settings
-    const companyName = (typeof window !== 'undefined' && localStorage.getItem('company_name')) || 'Techsprout';
+    const companyName = (typeof window !== 'undefined' && localStorage.getItem('company_name')) || 'Techsprout AI Labs';
     const companyLogo = (typeof window !== 'undefined' && localStorage.getItem('company_logo')) || '';
-
-    const logoHtml = companyLogo
-      ? `<img src="${companyLogo}" alt="${companyName}" style="max-height: 45px; margin-bottom: 8px;" />`
-      : '';
 
     // Standard simulated variable substitutions
     const sampleData: Record<string, string> = {
       name: 'John Doe',
       employee_name: 'John Doe',
+      candidate_name: 'Jane Doe',
+      position: 'Software Engineer Intern',
+      duration: '3 Months',
+      joining_date: '15-Jun-2026',
+      stipend: '15,000',
+      letter_date: '09-Jun-2026',
+      acceptance_date: '11-Jun-2026',
+      salutation: 'Mr.',
+      designation: 'Senior Frontend Engineer',
+      last_working_day: '30-Jun-2026',
+      employee_code: 'TS1002',
+      month: 'June',
+      year: '2026',
+      net_salary: '15,000.00',
+      present_days: '30',
+      lop_days: '0',
       otp: '482910',
       otp_code: '482910',
       reporting_to: 'Sarah Connor (Manager)',
@@ -250,15 +412,47 @@ export default function MailTemplatesPage() {
       leave_dates: 'June 5, 2026 to June 10, 2026',
       payslip_month: 'May 2026',
       login_url: 'https://hrms.techsprout.com/login',
-      current_date: '2026-06-03',
+      current_date: '2026-06-09',
       user_email: 'john.doe@techsprout.com',
       phone: '+1 (555) 019-2834',
-      date: '2026-06-03',
+      date: '2026-06-09',
+      company_name: companyName,
+      company_logo: companyLogo || 'TS'
     };
 
     Object.entries(sampleData).forEach(([key, value]) => {
       html = html.replace(new RegExp(`{{\\s*${key}\\s*}}`, 'g'), value);
     });
+
+    if (templateType !== 'mail') {
+      // PDF document preview (A4 style wrapper)
+      return `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body {
+                margin: 0;
+                padding: 40px;
+                background-color: #ffffff;
+                font-family: 'DejaVu Sans', Arial, sans-serif;
+                color: #000000;
+              }
+              ${style || ''}
+            </style>
+          </head>
+          <body>
+            ${html || '<p style="text-align: center; color: #999; padding-top: 100px;">Document template body is empty.</p>'}
+          </body>
+        </html>
+      `;
+    }
+
+    // Email template preview wrapper
+    const logoHtml = companyLogo
+      ? `<img src="${companyLogo}" alt="${companyName}" style="max-height: 45px; margin-bottom: 8px;" />`
+      : '';
 
     return `
       <!DOCTYPE html>
@@ -266,7 +460,6 @@ export default function MailTemplatesPage() {
         <head>
           <meta charset="utf-8">
           <style>
-            /* Global Base Email Styles */
             body {
               margin: 0;
               padding: 20px;
@@ -312,8 +505,6 @@ export default function MailTemplatesPage() {
             .global-footer p {
               margin: 4px 0;
             }
-
-            /* Custom Template CSS Overrides */
             ${style || ''}
           </style>
         </head>
@@ -324,7 +515,7 @@ export default function MailTemplatesPage() {
               <h1>${companyName}</h1>
             </div>
             <div class="email-body">
-              ${html || '<p style="text-align: center; color: #999;">Email body is empty. Type some HTML in the editor.</p>'}
+              ${html || '<p style="text-align: center; color: #999;">Email body is empty.</p>'}
             </div>
             <div class="global-footer">
               <p>This is an automated notification from ${companyName}.</p>
@@ -338,36 +529,78 @@ export default function MailTemplatesPage() {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  // Placeholder tags lists for easy UI badge clicks
-  const placeholderTags = [
-    { label: 'Name', tag: 'name' },
-    { label: 'Employee Name', tag: 'employee_name' },
-    { label: 'OTP Code', tag: 'otp' },
-    { label: 'Reporting To', tag: 'reporting_to' },
-    { label: 'Leave Type', tag: 'leave_type' },
-    { label: 'Leave Dates', tag: 'leave_dates' },
-    { label: 'Payslip Month', tag: 'payslip_month' },
-    { label: 'Login URL', tag: 'login_url' },
-    { label: 'Current Date', tag: 'current_date' },
-  ];
-
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50">
-      {/* LEFT PANE - Template Browser */}
-      <div className="w-80 border-r border-slate-200 flex flex-col bg-white h-full flex-shrink-0">
-        <div className="p-4 border-b border-slate-200 space-y-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-blue-600" />
-              Mail Templates
-            </h1>
-            <Badge variant="secondary" className="font-semibold text-slate-500 rounded-md">
-              {templates.length}
-            </Badge>
-          </div>
+    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50">
+      {/* Centralized Templates horizontal tab bar */}
+      <div className="bg-white border-b border-slate-200 px-6 flex items-center justify-between flex-shrink-0 select-none shadow-sm z-10">
+        <div className="flex space-x-8">
+          <button
+            onClick={() => handleTabChange('mail')}
+            className={`flex items-center gap-2 py-4 text-xs font-bold border-b-2 transition-all relative ${
+              templateType === 'mail'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Mail className="w-4 h-4" />
+            Mail Templates
+          </button>
+          <button
+            onClick={() => handleTabChange('payslip')}
+            className={`flex items-center gap-2 py-4 text-xs font-bold border-b-2 transition-all relative ${
+              templateType === 'payslip'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Payslip Templates
+          </button>
+          <button
+            onClick={() => handleTabChange('offer_joining')}
+            className={`flex items-center gap-2 py-4 text-xs font-bold border-b-2 transition-all relative ${
+              templateType === 'offer_joining'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Offer & Joining
+          </button>
+          <button
+            onClick={() => handleTabChange('exit_relieving')}
+            className={`flex items-center gap-2 py-4 text-xs font-bold border-b-2 transition-all relative ${
+              templateType === 'exit_relieving'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Exit & Relieving
+          </button>
+        </div>
+        <div className="text-[10px] text-slate-400 font-medium">
+          Category: <span className="font-bold text-slate-700 capitalize">{templateType.replace('_', ' & ')}</span>
+        </div>
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* LEFT PANE - Template Browser */}
+        <div className="w-80 border-r border-slate-200 flex flex-col bg-white h-full flex-shrink-0">
+          <div className="p-4 border-b border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Templates
+              </h1>
+              <Badge variant="secondary" className="font-semibold text-slate-500 rounded-md">
+                {templates.length}
+              </Badge>
+            </div>
+
           <Button
             onClick={handleNewTemplate}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm h-10 gap-2"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm h-10 gap-2 text-xs"
           >
             <Plus className="w-4 h-4" /> Add Template
           </Button>
@@ -377,7 +610,7 @@ export default function MailTemplatesPage() {
               placeholder="Search templates..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 text-sm rounded-lg border-slate-200"
+              className="pl-9 h-9 text-xs rounded-lg border-slate-200"
             />
           </div>
         </div>
@@ -390,8 +623,8 @@ export default function MailTemplatesPage() {
               <p className="text-xs text-slate-400 mt-2">Loading templates...</p>
             </div>
           ) : templates.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-sm">
-              No templates found. Create one to get started!
+            <div className="p-8 text-center text-slate-400 text-xs leading-relaxed">
+              No templates found in this category. Create one to get started!
             </div>
           ) : (
             templates.map((tmpl) => {
@@ -408,7 +641,7 @@ export default function MailTemplatesPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-sm text-slate-700 truncate block max-w-[150px]">
+                    <span className="font-semibold text-xs text-slate-700 truncate block max-w-[150px]">
                       {tmpl.template_name}
                     </span>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -418,7 +651,7 @@ export default function MailTemplatesPage() {
                           e.stopPropagation();
                           handleToggleStatus(tmpl);
                         }}
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors ${
+                        className={`text-[9px] px-2 py-0.5 rounded-full font-medium transition-colors ${
                           tmpl.active_status === 1
                             ? 'bg-green-50 text-green-700 hover:bg-green-100'
                             : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -428,10 +661,10 @@ export default function MailTemplatesPage() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-400 truncate mt-1">{tmpl.subject}</p>
+                  <p className="text-[10px] text-slate-400 truncate mt-1">{tmpl.subject}</p>
 
                   <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[9px] text-slate-400">
                       {tmpl.updated_at ? new Date(tmpl.updated_at).toLocaleDateString() : 'Just now'}
                     </span>
                     {/* Delete button */}
@@ -459,15 +692,15 @@ export default function MailTemplatesPage() {
           /* Empty State */
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
             <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
-              <Mail className="w-8 h-8" />
+              {templateType === 'mail' ? <Mail className="w-8 h-8" /> : <FileText className="w-8 h-8" />}
             </div>
-            <h2 className="text-lg font-bold text-slate-800">No Template Selected</h2>
-            <p className="text-slate-400 text-sm max-w-sm mt-1">
-              Select an email template from the list on the left to configure it, or create a brand new template.
+            <h2 className="text-sm font-bold text-slate-800">No Template Selected</h2>
+            <p className="text-slate-400 text-xs max-w-xs mt-1 leading-relaxed">
+              Select a template from the list on the left to configure it, or create a brand new template.
             </p>
             <Button
               onClick={handleNewTemplate}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm h-10 gap-2"
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm h-10 gap-2 text-xs"
             >
               <Plus className="w-4 h-4" /> Create New Template
             </Button>
@@ -479,14 +712,14 @@ export default function MailTemplatesPage() {
             <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                  <Mail className="w-5 h-5" />
+                  {templateType === 'mail' ? <Mail className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    {isCreating ? 'Create Mail Template' : `Template: ${selectedTemplate?.template_name}`}
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    {isCreating ? 'Create Template' : `Template: ${selectedTemplate?.template_name}`}
                   </h2>
-                  <p className="text-xs text-slate-400">
-                    {isCreating ? 'Configure new system email' : 'Modify template content and design'}
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {isCreating ? 'Configure new document layout' : 'Modify template content and stylesheet'}
                   </p>
                 </div>
               </div>
@@ -497,7 +730,7 @@ export default function MailTemplatesPage() {
                 <Button
                   onClick={handleSave}
                   disabled={isPending}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm h-10 gap-2"
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm h-10 gap-2 text-xs"
                 >
                   {isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -514,7 +747,7 @@ export default function MailTemplatesPage() {
               <div className="flex gap-4">
                 <button
                   onClick={() => setActiveTab('edit')}
-                  className={`py-3 text-sm font-semibold border-b-2 transition-all ${
+                  className={`py-3 text-xs font-bold border-b-2 transition-all ${
                     activeTab === 'edit'
                       ? 'border-blue-600 text-blue-600'
                       : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -526,7 +759,7 @@ export default function MailTemplatesPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('preview')}
-                  className={`py-3 text-sm font-semibold border-b-2 transition-all ${
+                  className={`py-3 text-xs font-bold border-b-2 transition-all ${
                     activeTab === 'preview'
                       ? 'border-blue-600 text-blue-600'
                       : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -538,7 +771,7 @@ export default function MailTemplatesPage() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-4 text-xs text-slate-400">
+              <div className="flex items-center gap-4 text-[10px] text-slate-400">
                 <span className="flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> Changes autosaved locally
                 </span>
@@ -553,33 +786,33 @@ export default function MailTemplatesPage() {
                   {/* Grid fields for attributes */}
                   <div className="grid grid-cols-2 gap-4 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex-shrink-0">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         Template Name / Slug <span className="text-red-500">*</span>
                       </Label>
                       <Input
-                        placeholder="e.g. employee_onboarding_welcome"
+                        placeholder="e.g. leave_approved"
                         value={templateName}
                         onChange={(e) => setTemplateName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
-                        className="h-10 text-sm border-slate-200 focus:ring-blue-500"
+                        className="h-10 text-xs border-slate-200 focus:ring-blue-500"
                         disabled={!isCreating}
                       />
                       {validationErrors.template_name ? (
-                        <p className="text-red-500 text-xs flex items-center gap-1 mt-1 font-medium">
+                        <p className="text-red-500 text-[10px] flex items-center gap-1 mt-1 font-medium">
                           <AlertCircle className="w-3.5 h-3.5" />
                           {validationErrors.template_name}
                         </p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          Lowercase alphanumeric with underscores. Key lookup code for codebase integrations.
+                        <p className="text-[9px] text-slate-400 mt-1">
+                          Lowercase alphanumeric with underscores. Key lookup code for integration.
                         </p>
                       )}
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         Active Status
                       </Label>
-                      <div className="flex items-center gap-3 h-10 px-3 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-3 h-10 px-3 border border-slate-200 rounded-lg bg-white">
                         <input
                           type="checkbox"
                           id="active-status-toggle"
@@ -587,24 +820,24 @@ export default function MailTemplatesPage() {
                           onChange={(e) => setActiveStatus(e.target.checked ? 1 : 0)}
                           className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
                         />
-                        <Label htmlFor="active-status-toggle" className="text-sm text-slate-600 font-medium cursor-pointer">
-                          Enabled (Allow system to trigger emails using this template)
+                        <Label htmlFor="active-status-toggle" className="text-xs text-slate-600 font-semibold cursor-pointer">
+                          Enabled (Allow system to trigger documents using this template)
                         </Label>
                       </div>
                     </div>
 
                     <div className="col-span-2 space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Email Subject Line <span className="text-red-500">*</span>
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Subject Line / Document Title <span className="text-red-500">*</span>
                       </Label>
                       <Input
-                        placeholder="e.g. Welcome to the team, {{name}}!"
+                        placeholder="e.g. Welcome to the team, {{candidate_name}}!"
                         value={subject}
                         onChange={(e) => setSubject(e.target.value)}
-                        className="h-10 text-sm border-slate-200 focus:ring-blue-500"
+                        className="h-10 text-xs border-slate-200 focus:ring-blue-500"
                       />
                       {validationErrors.subject && (
-                        <p className="text-red-500 text-xs flex items-center gap-1 mt-1 font-medium">
+                        <p className="text-red-500 text-[10px] flex items-center gap-1 mt-1 font-medium">
                           <AlertCircle className="w-3.5 h-3.5" />
                           {validationErrors.subject}
                         </p>
@@ -619,17 +852,17 @@ export default function MailTemplatesPage() {
                         <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                         Dynamic Template Tags Helper
                       </h4>
-                      <p className="text-[11px] text-blue-700/80">
-                        Select a editor textarea (Body or Style), then click a tag below to insert it at your cursor.
+                      <p className="text-[10px] text-blue-700/80">
+                        Select an editor textarea below, then click a tag button to insert it at your cursor.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-w-[60%] justify-end">
-                      {placeholderTags.map((item) => (
+                      {getPlaceholderTags().map((item) => (
                         <button
                           key={item.tag}
                           type="button"
                           onClick={() => handleInsertTag(item.tag)}
-                          className="text-[10px] font-mono bg-white hover:bg-blue-600 hover:text-white border border-blue-200 text-blue-700 px-2 py-1 rounded-md transition-all font-semibold shadow-sm hover:scale-105 active:scale-95"
+                          className="text-[9px] font-mono bg-white hover:bg-blue-600 hover:text-white border border-blue-200 text-blue-700 px-2 py-1 rounded-md transition-all font-bold shadow-sm hover:scale-105 active:scale-95"
                           title={`Click to insert {{${item.tag}}}`}
                         >
                           {item.label}
@@ -645,7 +878,7 @@ export default function MailTemplatesPage() {
                       <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
                         <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
                           <Code className="w-3.5 h-3.5 text-blue-600" />
-                          Email Content (HTML Body)
+                          Document Content (HTML Body)
                         </span>
                         <Badge variant="secondary" className="font-mono text-[9px] rounded px-1.5 py-0">HTML</Badge>
                       </div>
@@ -654,8 +887,8 @@ export default function MailTemplatesPage() {
                         onFocus={() => setActiveTextarea('body')}
                         value={body}
                         onChange={(e) => setBody(e.target.value)}
-                        placeholder="Write your email HTML layout here... e.g. <p>Hello {{name}},</p>"
-                        className="flex-1 p-4 font-mono text-xs text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
+                        placeholder="Write your document HTML layout here..."
+                        className="flex-1 p-4 font-mono text-[11px] text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
                       />
                     </div>
 
@@ -664,7 +897,7 @@ export default function MailTemplatesPage() {
                       <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
                         <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
                           <Code className="w-3.5 h-3.5 text-indigo-600" />
-                          Template Styling (CSS Stylesheet)
+                          Document Styling (CSS Stylesheet)
                         </span>
                         <Badge variant="secondary" className="font-mono text-[9px] rounded px-1.5 py-0">CSS</Badge>
                       </div>
@@ -673,8 +906,8 @@ export default function MailTemplatesPage() {
                         onFocus={() => setActiveTextarea('style')}
                         value={style}
                         onChange={(e) => setStyle(e.target.value)}
-                        placeholder="Define your CSS stylesheet rules... e.g. .container { background-color: #ffffff; }"
-                        className="flex-1 p-4 font-mono text-xs text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
+                        placeholder="Define your CSS stylesheet rules..."
+                        className="flex-1 p-4 font-mono text-[11px] text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
                       />
                     </div>
                   </div>
@@ -682,36 +915,37 @@ export default function MailTemplatesPage() {
               ) : (
                 /* Tab: Live Sandbox Preview */
                 <div className="h-full flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                  {/* Simulated Email Header Wrapper */}
-                  <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex-shrink-0 space-y-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold text-slate-400 w-12 flex-shrink-0">From:</span>
-                      <span className="bg-slate-200/60 px-2 py-0.5 rounded text-slate-700 font-medium font-sans">
-                        Techsprout HR System &lt;hr@techsprout.com&gt;
-                      </span>
+                  {/* Simulated Email Header Wrapper (only for email tab) */}
+                  {templateType === 'mail' && (
+                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex-shrink-0 space-y-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-slate-400 w-12 flex-shrink-0">From:</span>
+                        <span className="bg-slate-200/60 px-2 py-0.5 rounded text-slate-700 font-medium font-sans">
+                          Techsprout HR System &lt;hr@techsprout.com&gt;
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-slate-400 w-12 flex-shrink-0">To:</span>
+                        <span className="bg-slate-200/60 px-2 py-0.5 rounded text-slate-700 font-medium font-sans">
+                          John Doe &lt;john.doe@techsprout.com&gt;
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs pt-1">
+                        <span className="font-semibold text-slate-400 w-12 flex-shrink-0">Subject:</span>
+                        <span className="font-bold text-slate-800 text-sm">
+                          {subject.replace(/{{\s*name\s*}}/g, 'John Doe').replace(/{{\s*employee_name\s*}}/g, 'John Doe')}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold text-slate-400 w-12 flex-shrink-0">To:</span>
-                      <span className="bg-slate-200/60 px-2 py-0.5 rounded text-slate-700 font-medium font-sans">
-                        John Doe &lt;john.doe@techsprout.com&gt;
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs pt-1">
-                      <span className="font-semibold text-slate-400 w-12 flex-shrink-0">Subject:</span>
-                      <span className="font-bold text-slate-800 text-sm">
-                        {subject.replace(/{{\s*name\s*}}/g, 'John Doe').replace(/{{\s*employee_name\s*}}/g, 'John Doe')}
-                      </span>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Sandboxed iframe content area */}
                   <div className="flex-1 p-4 bg-slate-100/50 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full max-w-4xl bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col">
-                      {/* Iframe element */}
                       <iframe
                         srcDoc={renderPreview()}
                         className="w-full h-full border-none bg-white"
-                        title="Isolated Sandbox Email Preview"
+                        title="Isolated Sandbox Document Preview"
                         sandbox="allow-same-origin"
                       />
                     </div>
@@ -723,5 +957,6 @@ export default function MailTemplatesPage() {
         )}
       </div>
     </div>
+  </div>
   );
 }

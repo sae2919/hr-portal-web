@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bell, Calendar, CheckCircle2, XCircle,
   Cake, Star, AlertCircle, IndianRupee,
@@ -41,6 +42,7 @@ function NotifIcon({ icon, color }: { icon: Notification['icon']; color: Notific
 // ── Main Panel ────────────────────────────────────────────────────────────────
 
 export function NotificationPanel() {
+  const router = useRouter();
   const [open, setOpen]               = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading]         = useState(false);
@@ -61,9 +63,11 @@ export function NotificationPanel() {
     }
   };
 
-  // Fetch on mount (for the red dot indicator)
+  // Fetch on mount (for the red dot indicator) — delayed 3s so it doesn't
+  // compete with critical page API calls during initial load
   useEffect(() => {
-    fetchNotifications();
+    const timer = setTimeout(() => fetchNotifications(), 3000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Fetch on open
@@ -91,6 +95,35 @@ export function NotificationPanel() {
 
   const markRead = (id: string) => {
     setReadIds(prev => new Set([...prev, id]));
+  };
+
+  const handleNotifClick = (notif: Notification) => {
+    markRead(notif.id);
+    setOpen(false);
+
+    if (notif.url) {
+      router.push(notif.url);
+      return;
+    }
+
+    switch (notif.type) {
+      case 'leave_request':
+      case 'leave_status':
+        router.push('/leaves');
+        break;
+      case 'birthday':
+      case 'anniversary':
+        router.push('/events');
+        break;
+      case 'attendance':
+        router.push('/attendance');
+        break;
+      case 'payroll':
+        router.push('/payroll');
+        break;
+      default:
+        break;
+    }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -172,7 +205,7 @@ export function NotificationPanel() {
                 return (
                   <div
                     key={notif.id}
-                    onClick={() => markRead(notif.id)}
+                    onClick={() => handleNotifClick(notif)}
                     className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50 ${
                       isRead ? 'opacity-60' : ''
                     }`}

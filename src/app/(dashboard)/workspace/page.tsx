@@ -395,7 +395,7 @@ export default function WorkspacePage() {
     setLoading(true);
     setApiError(false);
     try {
-      const statsRes = await api.get('/workspace/stats', { timeout: 10000 });
+      const statsRes = await api.get('/workspace/stats');
       setStats(statsRes.data);
     } catch {
       setApiError(true);

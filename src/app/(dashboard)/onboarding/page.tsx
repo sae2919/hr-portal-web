@@ -45,6 +45,7 @@ interface OnboardingRequest {
   department: string;
   joining_date: string;
   ctc: number;
+  duration?: string;
   status: 'pending' | 'approved' | 'rejected' | 'onboarded';
   rejection_reason?: string;
   documents: OnboardingDocument[];
@@ -170,6 +171,7 @@ export default function OnboardingPage() {
   const [generatingLetter, setGeneratingLetter] = useState(false);
   const [sendingLetterId, setSendingLetterId] = useState<number | null>(null);
   const [downloadingLetterId, setDownloadingLetterId] = useState<number | null>(null);
+  const [viewingLetterId, setViewingLetterId] = useState<number | null>(null);
   const [letterDate, setLetterDate] = useState(new Date().toISOString().split('T')[0]);
   const [letterContent, setLetterContent] = useState('');
   const [formData, setFormData] = useState({
@@ -180,6 +182,7 @@ export default function OnboardingPage() {
     department: '',
     joining_date: '',
     ctc: '',
+    duration: '',
   });
 
   const [onboardingType, setOnboardingType] = useState<'full_time' | 'intern' | 'free_intern'>('full_time');
@@ -426,6 +429,7 @@ export default function OnboardingPage() {
         department: '',
         joining_date: '',
         ctc: '',
+        duration: '',
       });
       setOnboardingType('full_time');
       setCustomHeading('');
@@ -690,6 +694,23 @@ export default function OnboardingPage() {
     }
   };
 
+  // View offer letter
+  const viewOfferLetter = async (letterId: number) => {
+    try {
+      setViewingLetterId(letterId);
+      const response = await api.get(`/onboarding/offer-letters/${letterId}/download`, {
+        responseType: 'blob',
+      });
+      const file = new Blob([response.data], { type: 'application/pdf' });
+      const fileURL = URL.createObjectURL(file);
+      window.open(fileURL, '_blank');
+    } catch (error) {
+      toast.error('Failed to view offer letter');
+    } finally {
+      setViewingLetterId(null);
+    }
+  };
+
   // Send offer letter
   const handleSendOfferLetter = async (letterId: number) => {
     try {
@@ -713,6 +734,21 @@ export default function OnboardingPage() {
       toast.error(error?.response?.data?.message || 'Failed to send offer letter');
     } finally {
       setSendingLetterId(null);
+    }
+  };
+
+  // Delete onboarding request
+  const handleDeleteRequest = async (requestId: number) => {
+    if (!window.confirm('Are you sure you want to delete this onboarding request? This will permanently delete all associated documents.')) {
+      return;
+    }
+    
+    try {
+      await api.delete(`/onboarding/${requestId}`);
+      toast.success('Onboarding request deleted successfully');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to delete onboarding request');
     }
   };
 
@@ -904,13 +940,23 @@ export default function OnboardingPage() {
                               {request.status}
                             </Badge>
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right flex justify-end gap-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); setSelectedRequest(request); }}
                               className="p-2 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition"
+                              title="View Onboarding File"
                             >
                               <Eye size={15} />
                             </button>
+                            {isAdmin && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteRequest(request.id); }}
+                                className="p-2 hover:bg-slate-100 text-slate-400 hover:text-red-600 rounded-xl transition"
+                                title="Delete Onboarding Request"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1305,9 +1351,24 @@ export default function OnboardingPage() {
                         <Button
                           size="sm"
                           variant="outline"
+                          onClick={() => viewOfferLetter(letter.id)}
+                          disabled={viewingLetterId === letter.id}
+                          className="h-8 w-8 p-0 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition shadow-sm border border-slate-200"
+                          title="View Offer Letter"
+                        >
+                          {viewingLetterId === letter.id ? (
+                            <Loader2 size={14} className="animate-spin text-slate-500" />
+                          ) : (
+                            <Eye size={14} />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={() => downloadOfferLetter(letter.id, `offer_letter_${selectedRequest.candidate_name}.pdf`)}
                           disabled={downloadingLetterId === letter.id}
                           className="h-8 w-8 p-0 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition shadow-sm border border-slate-200"
+                          title="Download Offer Letter"
                         >
                           {downloadingLetterId === letter.id ? (
                             <Loader2 size={14} className="animate-spin text-slate-500" />
@@ -1729,16 +1790,31 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div>
-                  <Label className="text-slate-600">CTC (Annual)</Label>
+                  <Label className="text-slate-600">
+                    {onboardingType === 'intern' ? 'Stipend (Monthly ₹)' : onboardingType === 'free_intern' ? 'CTC (N/A for free)' : 'CTC (Annual ₹)'}
+                  </Label>
                   <Input
                     type="number"
                     value={formData.ctc}
                     onChange={(e) => setFormData({ ...formData, ctc: e.target.value })}
-                    placeholder="Annual compensation"
-                    className="rounded-xl border-slate-200 h-10 mt-1"
+                    placeholder={onboardingType === 'intern' ? 'Monthly stipend amount' : onboardingType === 'free_intern' ? 'Leave blank (unpaid)' : 'Annual CTC'}
+                    disabled={onboardingType === 'free_intern'}
+                    className="rounded-xl border-slate-200 h-10 mt-1 disabled:opacity-50"
                   />
                 </div>
               </div>
+
+              {(onboardingType === 'intern' || onboardingType === 'free_intern') && (
+                <div>
+                  <Label className="text-slate-600">Internship Duration</Label>
+                  <Input
+                    value={formData.duration}
+                    onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                    placeholder="e.g. 3 months, 6 months"
+                    className="rounded-xl border-slate-200 h-10 mt-1"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>

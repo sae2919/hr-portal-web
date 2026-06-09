@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Building2, Briefcase, Clock,
   Calendar, IndianRupee, UserPlus, Settings, ChevronLeft,
   ChevronRight, UserCircle, Network, Cake, Quote, UserCheck,
-  TrendingUp, Mail, Laptop,
+  TrendingUp, Mail, Laptop, Files,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
@@ -43,29 +43,29 @@ const navItems = [
     label: 'Attendance',
     href: '/attendance',
     icon: Clock,
-    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'employee'],
   },
   {
     label: 'Leaves',
     href: '/leaves',
     icon: Calendar,
-    roles: ['super_admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'employee'],
   },
   {
     label: 'Payroll',
     href: '/payroll',
     icon: IndianRupee,
-    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'employee'],
   },
   {
     label: 'Appraisals',
-    href: '/salary-revisions',
+    href: '/appraisals',
     icon: TrendingUp,
-    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'sales_manager', 'employee'],
+    roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'employee'],
   },
   {
     label: 'Organization',
-    href: '/organization',
+    href: '/org-chart',
     icon: Network,
     roles: ['super_admin','super admin', 'admin', 'hr', 'manager', 'team_lead', 'employee'],
   },
@@ -88,9 +88,9 @@ const navItems = [
     roles: ['super_admin','super admin', 'admin', 'hr'],
   },
   {
-    label: 'Mail Templates',
+    label: 'Templates',
     href: '/mail-templates',
-    icon: Mail,
+    icon: Files,
     roles: ['super_admin', 'super admin', 'admin', 'hr'],
   },
   {
@@ -138,7 +138,7 @@ export function Sidebar({ userRole }: { userRole: string }) {
 
   const [branding, setBranding] = useState({
     name: 'Techsprout',
-    logo: '/logo.png',
+    logo: '/logo-brand.png',
   });
 
   useEffect(() => {
@@ -149,7 +149,7 @@ export function Sidebar({ userRole }: { userRole: string }) {
       setTimeout(() => {
         setBranding({
           name: cachedName || 'Techsprout',
-          logo: cachedLogo || '/logo.png',
+          logo: cachedLogo || '/logo-brand.png',
         });
       }, 0);
     }
@@ -160,7 +160,7 @@ export function Sidebar({ userRole }: { userRole: string }) {
         const res = await api.get('/settings');
         const data = res.data;
         const name = data.company_name || 'Techsprout';
-        const logo = data.company_logo || '/logo.png';
+        const logo = data.company_logo || '/logo-brand.png';
         
         setBranding({ name, logo });
         localStorage.setItem('company_name', name);

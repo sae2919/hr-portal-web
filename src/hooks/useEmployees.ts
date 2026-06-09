@@ -25,6 +25,7 @@ export const useEmployee = (id: number) => {
     queryFn: () =>
       api.get(`/employees/${id}`).then((r) => r.data.data),
     enabled: !!id,
+    staleTime: 5 * 60 * 1000,
   });
 };
 

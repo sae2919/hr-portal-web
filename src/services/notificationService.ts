@@ -9,6 +9,7 @@ export interface Notification {
   read: boolean;
   icon: 'calendar' | 'check' | 'x' | 'cake' | 'star' | 'alert' | 'rupee';
   color: 'orange' | 'green' | 'red' | 'pink' | 'yellow' | 'blue';
+  url?: string;
 }
 
 export interface NotificationResponse {
@@ -20,7 +21,7 @@ export interface NotificationResponse {
 export const notificationService = {
   getAll: async (): Promise<NotificationResponse> => {
     try {
-      const response = await api.get('/notifications', { timeout: 8000 });
+      const response = await api.get('/notifications', { timeout: 20000 });
       return response.data;
     } catch (error) {
       console.warn('Notifications unavailable');

@@ -22,7 +22,7 @@ export default function SettingsPage() {
     pt_enabled: true,
     pf_percentage: 12,
     company_name: 'Techsprout',
-    company_logo: '/logo.png',
+    company_logo: '/logo-brand.png',
   });
   const [saved, setSaved] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +49,7 @@ export default function SettingsPage() {
           pt_enabled: String(data.pt_enabled) === '1' || data.pt_enabled === true,
           pf_percentage: Number(data.pf_percentage) || 12,
           company_name: data.company_name || 'Techsprout',
-          company_logo: data.company_logo || '/logo.png',
+          company_logo: data.company_logo || '/logo-brand.png',
         };
         setSettings(normalized);
         setSaved(normalized);
@@ -89,7 +89,7 @@ export default function SettingsPage() {
         pt_enabled: String(data.pt_enabled) === '1' || data.pt_enabled === true,
         pf_percentage: Number(data.pf_percentage) || 12,
         company_name: data.company_name || 'Techsprout',
-        company_logo: data.company_logo || '/logo.png',
+        company_logo: data.company_logo || '/logo-brand.png',
       };
       setSettings(normalized);
       setSaved(normalized);
@@ -206,7 +206,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => {
                         setLogoFile(null);
-                        setLogoPreview(settings.company_logo || '/logo.png');
+                        setLogoPreview(settings.company_logo || '/logo-brand.png');
                       }}
                       className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
                     >

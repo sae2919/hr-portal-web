@@ -72,7 +72,7 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       setApiError(false);
-      const res = await api.get('/dashboard/stats', { timeout: 10000 });
+      const res = await api.get('/dashboard/stats');
       setStats(res.data);
       // Store in sessionStorage with timestamp
       try { sessionStorage.setItem('dash_stats', JSON.stringify({ ts: Date.now(), data: res.data })); } catch { }
@@ -135,10 +135,14 @@ export default function DashboardPage() {
     if (!isAuthenticated && token === null) { router.push('/login'); return; }
     if (!isAuthenticated || !user) return;
     if (tier !== 'admin' && tier !== 'hr') { router.replace('/workspace'); return; }
-    loadStats();
-    loadDailyQuote();
-    loadTodaySpecial();
-    loadUpcomingEvents();
+
+    // Fire all data fetches in PARALLEL — don't wait for each before starting the next
+    Promise.allSettled([
+      loadStats(),
+      loadDailyQuote(),
+      loadTodaySpecial(),
+      loadUpcomingEvents(),
+    ]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadStats, isAuthenticated, tier, user, router, token]);
 

@@ -85,7 +85,7 @@ export const eventService = {
 
   getEvents: async (params?: { month?: number; year?: number; start_date?: string; end_date?: string }) => {
     try {
-      const response = await api.get('/events', { params, timeout: 10000 });
+      const response = await api.get('/events', { params });
       return response.data;
     } catch (error) {
       console.error('Failed to fetch events:', error);
@@ -98,7 +98,7 @@ export const eventService = {
     if (_upcomingEventsCache) return _upcomingEventsCache;
     // Deduplicate concurrent calls
     if (!_upcomingEventsPending) {
-      _upcomingEventsPending = api.get('/events/upcoming', { timeout: 10000 })
+      _upcomingEventsPending = api.get('/events/upcoming')
         .then(r => { _upcomingEventsCache = r.data; return r.data; })
         .catch(() => { const fallback = { success: true, data: [] }; _upcomingEventsCache = fallback; return fallback; })
         .finally(() => { _upcomingEventsPending = null; });
@@ -111,7 +111,7 @@ export const eventService = {
     if (_todaySpecialCache) return _todaySpecialCache;
     // Deduplicate concurrent calls — all callers await the same in-flight request
     if (!_todaySpecialPending) {
-      _todaySpecialPending = api.get('/events/today-special', { timeout: 10000 })
+      _todaySpecialPending = api.get('/events/today-special')
         .then(r => { _todaySpecialCache = r.data; return r.data; })
         .catch(() => { const fallback = { success: true, data: { birthdays: [], anniversaries: [] } }; _todaySpecialCache = fallback; return fallback; })
         .finally(() => { _todaySpecialPending = null; });
@@ -121,7 +121,7 @@ export const eventService = {
 
   getUpcomingBirthdays: async (days: number = 30) => {
     try {
-      const response = await api.get('/events/upcoming-birthdays', { params: { days }, timeout: 10000 });
+      const response = await api.get('/events/upcoming-birthdays', { params: { days } });
       return response.data;
     } catch (error) {
       console.error('Failed to fetch upcoming birthdays:', error);
@@ -151,7 +151,6 @@ export const eventService = {
     try {
       const response = await api.get(`/events/wishes/${employeeId}`, {
         params: { wish_type: wishType },
-        timeout: 8000,
       });
       return response.data;
     } catch (error) {
