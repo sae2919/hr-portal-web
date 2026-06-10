@@ -234,7 +234,7 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
   }
 
   const FONT = "'Times New Roman', Times, serif";
-  const CELL = { border: 'none' as const, padding: '2px 0', color: '#000', fontSize: '10px', fontFamily: FONT };
+  const CELL = { border: 'none' as const, padding: '2px 0', color: '#000', fontSize: '10pt', fontFamily: FONT };
   const LABEL_CELL = { ...CELL, width: '42%' };
 
   function handlePrint() {
@@ -281,17 +281,17 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
     ];
 
     const empLeftHtml = empLeft.map(([l, v]) =>
-      `<tr><td style="width:42%;padding:2px 0;border:none;color:black !important;font-size:10px;">${l}</td><td style="padding:2px 0;border:none;color:black !important;font-size:10px;">${v}</td></tr>`
+      `<tr><td style="width:42%;padding:2px 0;border:none;color:black !important;font-size:10pt;">${l}</td><td style="padding:2px 0;border:none;color:black !important;font-size:10pt;">${v}</td></tr>`
     ).join('');
     const empRightHtml = empRight.map(([l, v]) =>
-      `<tr><td style="width:48%;padding:2px 0;border:none;color:black !important;font-size:10px;">${l}</td><td style="padding:2px 0;border:none;color:black !important;font-size:10px;">${v}</td></tr>`
+      `<tr><td style="width:48%;padding:2px 0;border:none;color:black !important;font-size:10pt;">${l}</td><td style="padding:2px 0;border:none;color:black !important;font-size:10pt;">${v}</td></tr>`
     ).join('');
 
     // Data rows: outer-box sides + horizontal row borders only; single divider between Earnings and Deductions
     const dataRowsHtml = Array.from({ length: maxRows }).map((_, i) => {
       const earn = leftRows[i];
       const ded = rightRows[i];
-      const R = 'border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;color:black !important';
+      const R = 'border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;color:black !important;font-size:9pt;font-family:\'Times New Roman\', Times, serif';
       return `<tr>
         <td style="${R};border-left:1px solid #000;padding:3px 8px;">${earn?.label ?? ''}</td>
         <td style="${R};padding:3px 8px;text-align:right;">${earn?.master !== null ? fmt(earn.master) : ''}</td>
@@ -317,13 +317,13 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
           <img src="${logoSrc}" style="max-height:48px;width:auto;object-fit:contain;display:block;" onerror="this.style.display='none'" />
         </td>
         <td style="width:70%;text-align:center;vertical-align:middle;border:none;padding:0;">
-          <div style="font-size:16px;font-weight:bold;color:black !important;font-family: 'Times New Roman', Times, serif;">Techsprout AI Labs</div>
-          <div style="font-size:9px;color:black !important;line-height:1.3;margin-top:2px;font-family: 'Times New Roman', Times, serif;">8-2-293/82/A/787/1/4F/1, Road No36,4thFloor,JubileeHills,Hyderabad, Shaikpet, Telangana,India, 500033</div>
+          <div style="font-size:11.5pt;font-weight:bold;color:black !important;font-family: 'Times New Roman', Times, serif;">Techsprout AI Labs</div>
+          <div style="font-size:9.5pt;color:black !important;line-height:1.3;margin-top:2px;font-family: 'Times New Roman', Times, serif;">8-2-293/82/A/787/1/4F/1, Road No36,4thFloor,JubileeHills,Hyderabad, Shaikpet, Telangana,India, 500033</div>
         </td>
         <td style="width:15%;border:none;padding:0;"></td>
       </tr>
     </table>
-    <div style="text-align:center;font-size:12px;font-weight:bold;color:black !important;margin-bottom:8px;font-family: 'Times New Roman', Times, serif;">Payslip for the month of ${MONTHS[payroll.month - 1]} ${payroll.year}</div>
+    <div style="text-align:center;font-size:11.5pt;font-weight:bold;color:black !important;margin-bottom:8px;font-family: 'Times New Roman', Times, serif;">Payslip for the month of ${MONTHS[payroll.month - 1]} ${payroll.year}</div>
     <table style="margin-bottom:8px;">
       <tr>
         <td style="width:50%;padding:5px 8px;border:1px solid #000;vertical-align:top;color:black !important;">
@@ -337,16 +337,16 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
     <table style="margin-bottom:8px;">
       <thead>
         <tr>
-          <th style="width:30%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;padding:3px 8px;text-align:center;font-weight:bold;color:black !important;">Earnings</th>
-          <th style="width:10%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;padding:3px 8px;text-align:right;font-weight:bold;color:black !important;">Master</th>
-          <th style="width:10%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;padding:3px 8px;text-align:right;font-weight:bold;color:black !important;">Actual</th>
-          <th style="width:40%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;padding:3px 8px;text-align:center;font-weight:bold;color:black !important;">Deductions</th>
-          <th style="width:10%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:1px solid #000;padding:3px 8px;text-align:right;font-weight:bold;color:black !important;">Actual</th>
+          <th style="width:30%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;padding:3px 8px;text-align:center;font-weight:bold;color:black !important;font-size:9pt;font-family:'Times New Roman', Times, serif;">Earnings</th>
+          <th style="width:10%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;padding:3px 8px;text-align:right;font-weight:bold;color:black !important;font-size:9pt;font-family:'Times New Roman', Times, serif;">Master</th>
+          <th style="width:10%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;padding:3px 8px;text-align:right;font-weight:bold;color:black !important;font-size:9pt;font-family:'Times New Roman', Times, serif;">Actual</th>
+          <th style="width:40%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;padding:3px 8px;text-align:center;font-weight:bold;color:black !important;font-size:9pt;font-family:'Times New Roman', Times, serif;">Deductions</th>
+          <th style="width:10%;border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:1px solid #000;padding:3px 8px;text-align:right;font-weight:bold;color:black !important;font-size:9pt;font-family:'Times New Roman', Times, serif;">Actual</th>
         </tr>
       </thead>
       <tbody>
         ${dataRowsHtml}
-        <tr style="font-weight:bold;">
+        <tr style="font-weight:bold;font-size:9pt;font-family:'Times New Roman', Times, serif;">
           <td style="border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;padding:3px 8px;color:black !important;font-weight:bold;">Total Earnings:INR.</td>
           <td style="border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;padding:3px 8px;text-align:right;color:black !important;font-weight:bold;">${fmt(masterGross)}</td>
           <td style="border-top:1px solid #000;border-bottom:1px solid #000;border-left:none;border-right:none;padding:3px 8px;text-align:right;color:black !important;font-weight:bold;">${fmt(payroll.gross_salary)}</td>
@@ -355,14 +355,15 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
         </tr>
       </tbody>
     </table>
-    <div style="font-size:11px;font-weight:bold;color:black !important;margin:8px 0 2px;">Net Pay for the month: &nbsp;${fmt(payroll.net_salary)}</div>
-    <div style="font-style:italic;font-size:10px;font-weight:bold;color:black !important;margin-bottom:14px;">(${amountInWords(net)})</div>
+    <div style="font-size:10pt;color:black !important;margin-top:16px;margin-bottom:2px;font-family: 'Times New Roman', Times, serif;">Net Pay for the month &nbsp;&nbsp;<span style="font-weight:bold;">${fmt(payroll.net_salary)}</span></div>
+    <div style="font-style:italic;font-weight:bold;font-size:9pt;color:black !important;margin-bottom:12px;font-family: 'Times New Roman', Times, serif;">(${amountInWords(net)})</div>
     
-    <div style="position:absolute;bottom:20px;left:20px;right:20px;">
-      <div style="border-top:1px solid #000;padding-top:8px;text-align:center;">
-        <span style="font-size:9px;color:black !important;">This is a system generated payslip and does not require a signature</span>
-      </div>
-      <div style="margin-top:16px;font-size:9px;color:black !important;">Print Date: ${printDate}</div>
+    <div style="border-top:1px solid #000;padding-top:6px;text-align:center;margin-top:12px;font-family: 'Times New Roman', Times, serif;">
+      <span style="font-size:8pt;color:black !important;">This is a system generated payslip and does not require a signature</span>
+    </div>
+
+    <div style="position:absolute;bottom:20px;left:20px;font-size:9pt;color:black !important;font-family: 'Times New Roman', Times, serif;">
+      Print Date: ${printDate}
     </div>
     </body></html>`;
 
@@ -390,9 +391,7 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
             </button>
           </div>
         </div>
-        <div id="payslip-print-area" style={{ position: 'relative', minHeight: '620px', padding: '24px 24px 80px 24px', fontFamily: FONT, fontSize: '10px', color: '#000', lineHeight: '1.3' }}>
-
-          {/* Header */}
+        <div id="payslip-print-area" style={{ position: 'relative', minHeight: '620px', padding: '24px 24px 80px 24px', fontFamily: FONT, fontSize: '10pt', color: '#000', lineHeight: '1.3' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8px', border: 'none' }}>
             <tbody>
               <tr>
@@ -405,10 +404,10 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
                   />
                 </td>
                 <td style={{ width: '70%', textAlign: 'center', verticalAlign: 'middle', border: 'none', padding: 0 }}>
-                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#000', fontFamily: FONT }}>
+                  <div style={{ fontSize: '11.5pt', fontWeight: 'bold', color: '#000', fontFamily: FONT }}>
                     Techsprout AI Labs
                   </div>
-                  <div style={{ fontSize: '9px', color: '#000', lineHeight: '1.3', marginTop: '2px', fontFamily: FONT }}>
+                  <div style={{ fontSize: '9.5pt', color: '#000', lineHeight: '1.3', marginTop: '2px', fontFamily: FONT }}>
                     8-2-293/82/A/787/1/4F/1, Road No36,4thFloor,JubileeHills,Hyderabad, Shaikpet, Telangana,India, 500033
                   </div>
                 </td>
@@ -416,7 +415,7 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
               </tr>
             </tbody>
           </table>
-          <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: '#000', marginTop: '4px', marginBottom: '8px', fontFamily: FONT }}>
+          <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 'bold', color: '#000', marginTop: '4px', marginBottom: '8px', fontFamily: FONT }}>
             Payslip for the month of {monthName} {payroll.year}
           </div>
 
@@ -469,18 +468,18 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8px' }}>
             <thead>
               <tr>
-                <th style={{ width: '30%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', textAlign: 'center', fontWeight: 'bold', color: '#000', fontSize: '10px', fontFamily: FONT }}>Earnings</th>
-                <th style={{ width: '10%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', fontWeight: 'bold', color: '#000', fontSize: '10px', fontFamily: FONT }}>Master</th>
-                <th style={{ width: '10%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', fontWeight: 'bold', color: '#000', fontSize: '10px', fontFamily: FONT }}>Actual</th>
-                <th style={{ width: '40%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', textAlign: 'center', fontWeight: 'bold', color: '#000', fontSize: '10px', fontFamily: FONT }}>Deductions</th>
-                <th style={{ width: '10%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: '1px solid #000', padding: '3px 8px', textAlign: 'right', fontWeight: 'bold', color: '#000', fontSize: '10px', fontFamily: FONT }}>Actual</th>
+                <th style={{ width: '30%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', textAlign: 'center', fontWeight: 'bold', color: '#000', fontSize: '9pt', fontFamily: FONT }}>Earnings</th>
+                <th style={{ width: '10%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', fontWeight: 'bold', color: '#000', fontSize: '9pt', fontFamily: FONT }}>Master</th>
+                <th style={{ width: '10%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', fontWeight: 'bold', color: '#000', fontSize: '9pt', fontFamily: FONT }}>Actual</th>
+                <th style={{ width: '40%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', textAlign: 'center', fontWeight: 'bold', color: '#000', fontSize: '9pt', fontFamily: FONT }}>Deductions</th>
+                <th style={{ width: '10%', borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: '1px solid #000', padding: '3px 8px', textAlign: 'right', fontWeight: 'bold', color: '#000', fontSize: '9pt', fontFamily: FONT }}>Actual</th>
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: maxRows }).map((_, i) => {
                 const earn = leftRows[i];
                 const ded = rightRows[i];
-                const ROW: React.CSSProperties = { borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', color: '#000', fontFamily: FONT };
+                const ROW: React.CSSProperties = { borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', color: '#000', fontFamily: FONT, fontSize: '9pt' };
                 return (
                   <tr key={i}>
                     <td style={{ ...ROW, borderLeft: '1px solid #000' }}>{earn?.label ?? ''}</td>
@@ -492,29 +491,31 @@ function PayslipModal({ payroll, items, companyName, companyLogo, onClose }: {
                 );
               })}
               <tr>
-                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', color: '#000', fontWeight: 'bold', fontFamily: FONT }}>Total Earnings:INR.</td>
-                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', color: '#000', fontWeight: 'bold', fontFamily: FONT }}>{fmt(masterGross)}</td>
-                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', color: '#000', fontWeight: 'bold', fontFamily: FONT }}>{fmt(payroll.gross_salary)}</td>
-                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', color: '#000', fontWeight: 'bold', fontFamily: FONT }}>Total Deductions:INR.</td>
-                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: '1px solid #000', padding: '3px 8px', textAlign: 'right', color: '#000', fontWeight: 'bold', fontFamily: FONT }}>{fmt(Number(payroll.total_deductions) + lopDeduction)}</td>
+                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', color: '#000', fontWeight: 'bold', fontFamily: FONT, fontSize: '9pt' }}>Total Earnings:INR.</td>
+                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', color: '#000', fontWeight: 'bold', fontFamily: FONT, fontSize: '9pt' }}>{fmt(masterGross)}</td>
+                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: 'none', padding: '3px 8px', textAlign: 'right', color: '#000', fontWeight: 'bold', fontFamily: FONT, fontSize: '9pt' }}>{fmt(payroll.gross_salary)}</td>
+                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: '1px solid #000', borderRight: 'none', padding: '3px 8px', color: '#000', fontWeight: 'bold', fontFamily: FONT, fontSize: '9pt' }}>Total Deductions:INR.</td>
+                <td style={{ borderTop: '1px solid #000', borderBottom: '1px solid #000', borderLeft: 'none', borderRight: '1px solid #000', padding: '3px 8px', textAlign: 'right', color: '#000', fontWeight: 'bold', fontFamily: FONT, fontSize: '9pt' }}>{fmt(Number(payroll.total_deductions) + lopDeduction)}</td>
               </tr>
             </tbody>
           </table>
 
           {/* Net Pay */}
-          <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#000', margin: '8px 0 2px', fontFamily: FONT }}>
-            Net Pay for the month: &nbsp;<span>{fmt(payroll.net_salary)}</span>
+          <div style={{ fontSize: '10pt', color: '#000', marginTop: '16px', marginBottom: '2px', fontFamily: FONT }}>
+            Net Pay for the month &nbsp;&nbsp;<span style={{ fontWeight: 'bold' }}>{fmt(payroll.net_salary)}</span>
           </div>
-          <div style={{ fontStyle: 'italic', fontSize: '10px', fontWeight: 'bold', color: '#000', marginBottom: '14px', fontFamily: FONT }}>
+          <div style={{ fontStyle: 'italic', fontWeight: 'bold', fontSize: '9pt', color: '#000', marginBottom: '12px', fontFamily: FONT }}>
             ({amountInWords(net)})
           </div>
 
-          {/* Footer */}
-          <div style={{ position: 'absolute', bottom: '24px', left: '24px', right: '24px' }}>
-            <div style={{ borderTop: '1px solid #000', paddingTop: '8px', textAlign: 'center' }}>
-              <span style={{ fontSize: '9px', color: '#000', fontFamily: FONT }}>This is a system generated payslip and does not require a signature</span>
-            </div>
-            <div style={{ marginTop: '16px', fontSize: '9px', color: '#000', fontFamily: FONT }}>Print Date: {printDate}</div>
+          {/* Footer Line & Disclaimer */}
+          <div style={{ borderTop: '1px solid #000', paddingTop: '6px', textAlign: 'center', marginTop: '12px', fontFamily: FONT }}>
+            <span style={{ fontSize: '8pt', color: '#000' }}>This is a system generated payslip and does not require a signature</span>
+          </div>
+
+          {/* Print Date */}
+          <div style={{ position: 'absolute', bottom: '24px', left: '24px', fontSize: '9pt', color: '#000', fontFamily: FONT }}>
+            Print Date: {printDate}
           </div>
         </div>
       </div>

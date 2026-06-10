@@ -33,6 +33,8 @@ const assetSchema = z.object({
   purchase_price: z.string().optional().or(z.literal('')),
   specifications: z.string().max(1000).optional().or(z.literal('')),
   status: z.enum(['available', 'assigned', 'maintenance', 'scrapped']).optional(),
+  has_charger: z.boolean().optional(),
+  has_sim: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.type === 'other' && (!data.custom_type || data.custom_type.trim() === '')) {
     ctx.addIssue({
@@ -80,6 +82,8 @@ function AssetModal({ open, onClose, asset, onSaveSuccess }: {
 }) {
   const isEdit = !!asset;
   const [loading, setLoading] = useState(false);
+  const [hasCharger, setHasCharger] = useState<boolean>(true);
+  const [hasSim, setHasSim] = useState<boolean>(true);
 
   const standardTypes = ['laptop', 'monitor', 'phone', 'keyboard', 'mouse', 'headset', 'docking_station'];
 
@@ -114,6 +118,9 @@ function AssetModal({ open, onClose, asset, onSaveSuccess }: {
         specifications: asset?.specifications ?? '',
         status: asset?.status ?? 'available',
       });
+      // Pre-populate charger/SIM toggles from existing asset or default true
+      setHasCharger(asset?.has_charger !== false);
+      setHasSim(asset?.has_sim !== false);
     }
   }, [open, asset, reset]);
 
@@ -133,6 +140,8 @@ function AssetModal({ open, onClose, asset, onSaveSuccess }: {
         purchase_price: data.purchase_price ? Number(data.purchase_price) : null,
         specifications: data.specifications || null,
         status: data.status,
+        has_charger: hasCharger,
+        has_sim: finalType === 'phone' ? hasSim : null,
       };
 
       if (isEdit && asset) {
@@ -178,13 +187,8 @@ function AssetModal({ open, onClose, asset, onSaveSuccess }: {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-700">Asset Name *</Label>
-              <Input placeholder="e.g. MacBook Pro 16" {...register('name')} />
-              {errors.name && <p className="text-red-500 text-[10px]">{errors.name.message}</p>}
-            </div>
-
+          {/* First row: Type | [Specify if Other] | Name — 2 or 3 cols */}
+          <div className={`grid grid-cols-1 gap-4 ${selectedType === 'other' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-700">Asset Type *</Label>
               <select
@@ -209,6 +213,15 @@ function AssetModal({ open, onClose, asset, onSaveSuccess }: {
                 {errors.custom_type && <p className="text-red-500 text-[10px]">{errors.custom_type.message}</p>}
               </div>
             )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-700">Asset Name *</Label>
+              <Input placeholder="e.g. MacBook Pro 16" {...register('name')} />
+              {errors.name && <p className="text-red-500 text-[10px]">{errors.name.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-700">Brand</Label>
@@ -251,6 +264,69 @@ function AssetModal({ open, onClose, asset, onSaveSuccess }: {
             </div>
           </div>
 
+          {/* Charger & SIM toggles */}
+          <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Accessories</h4>
+            {/* Charger — all asset types */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-slate-700">Charger</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHasCharger(true)}
+                  className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                    hasCharger
+                      ? 'bg-green-50 text-green-700 border-green-300'
+                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  With Charger
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHasCharger(false)}
+                  className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                    !hasCharger
+                      ? 'bg-red-50 text-red-700 border-red-300'
+                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  No Charger
+                </button>
+              </div>
+            </div>
+            {/* SIM — only for mobile phone */}
+            {selectedType === 'phone' && (
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-slate-700">SIM Card</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setHasSim(true)}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                      hasSim
+                        ? 'bg-green-50 text-green-700 border-green-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    With SIM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHasSim(false)}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                      !hasSim
+                        ? 'bg-red-50 text-red-700 border-red-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    No SIM
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Specifications / Notes</Label>
             <textarea
@@ -286,6 +362,8 @@ function AllocateModal({ open, onClose, asset, onAllocateSuccess }: {
   const [onboardings, setOnboardings] = useState<any[]>([]);
   const [selectedEntityId, setSelectedEntityId] = useState<number | string>('');
   const [conditionNotes, setConditionNotes] = useState('');
+  const [chargerGiven, setChargerGiven] = useState<boolean>(true);
+  const [simGiven, setSimGiven] = useState<boolean>(true);
 
   // Fetch employees and onboarding requests
   useEffect(() => {
@@ -300,8 +378,11 @@ function AllocateModal({ open, onClose, asset, onAllocateSuccess }: {
       });
       setSelectedEntityId('');
       setConditionNotes('');
+      // Default charger/SIM given to match asset's own accessories
+      setChargerGiven(asset?.has_charger !== false);
+      setSimGiven(asset?.has_sim !== false);
     }
-  }, [open]);
+  }, [open, asset]);
 
   const handleAllocate = async () => {
     if (!selectedEntityId) {
@@ -312,7 +393,9 @@ function AllocateModal({ open, onClose, asset, onAllocateSuccess }: {
     setLoading(true);
     try {
       const payload: any = {
-        condition_notes: conditionNotes || null
+        condition_notes: conditionNotes || null,
+        charger_given: asset?.has_charger !== null ? chargerGiven : null,
+        sim_given: asset?.type === 'phone' ? simGiven : null,
       };
 
       if (allocateType === 'employee') {
@@ -415,6 +498,69 @@ function AllocateModal({ open, onClose, asset, onAllocateSuccess }: {
               onChange={(e) => setConditionNotes(e.target.value)}
               className="w-full min-h-[80px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+          </div>
+
+          {/* Charger & SIM handing over toggles */}
+          <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Handing Over Accessories</h4>
+            {/* Charger */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-slate-700">Charger</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChargerGiven(true)}
+                  className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                    chargerGiven
+                      ? 'bg-green-50 text-green-700 border-green-300'
+                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  Giving Charger
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChargerGiven(false)}
+                  className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                    !chargerGiven
+                      ? 'bg-red-50 text-red-700 border-red-300'
+                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  No Charger
+                </button>
+              </div>
+            </div>
+            {/* SIM — only for mobile phone */}
+            {asset.type === 'phone' && (
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-slate-700">SIM Card</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSimGiven(true)}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                      simGiven
+                        ? 'bg-green-50 text-green-700 border-green-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    Giving SIM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSimGiven(false)}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-all border ${
+                      !simGiven
+                        ? 'bg-red-50 text-red-700 border-red-300'
+                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    No SIM
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -1078,6 +1224,32 @@ export default function AssetsPage() {
                                         {allocation?.condition_notes ? `"${allocation.condition_notes}"` : 'No condition notes'}
                                       </span>
                                     </div>
+                                    {/* Charger status */}
+                                    {allocation?.charger_given !== undefined && allocation?.charger_given !== null && (
+                                      <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                                        <span className="text-slate-400">Charger:</span>
+                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                                          allocation.charger_given
+                                            ? 'bg-green-50 text-green-700'
+                                            : 'bg-red-50 text-red-600'
+                                        }`}>
+                                          {allocation.charger_given ? 'Given ✓' : 'Not Given ✗'}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {/* SIM status — phones only */}
+                                    {asset.type === 'phone' && allocation?.sim_given !== undefined && allocation?.sim_given !== null && (
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-slate-400">SIM Card:</span>
+                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                                          allocation.sim_given
+                                            ? 'bg-green-50 text-green-700'
+                                            : 'bg-red-50 text-red-600'
+                                        }`}>
+                                          {allocation.sim_given ? 'Given ✓' : 'Not Given ✗'}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>

@@ -14,6 +14,8 @@ export interface Asset {
   status: 'available' | 'assigned' | 'maintenance' | 'scrapped';
   specifications?: string;
   image_path?: string;
+  has_charger?: boolean | null;
+  has_sim?: boolean | null;
   created_at: string;
   updated_at: string;
   current_allocation?: AssetAllocation;
@@ -31,6 +33,8 @@ export interface AssetAllocation {
   condition_notes?: string;
   return_notes?: string;
   allocated_by: number;
+  charger_given?: boolean | null;
+  sim_given?: boolean | null;
   created_at: string;
   updated_at: string;
   asset?: Asset;
