@@ -76,6 +76,7 @@ const schema = z.object({
   gender:      z.enum(['male', 'female', 'other']).optional(),
   blood_group: z.string().optional().or(z.literal('')),
   dob:         z.string().optional().or(z.literal('')),
+  official_dob: z.string().optional().or(z.literal('')),
   pan_number:      z.string().min(1, 'PAN number is required').regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN (e.g. ABCDE1234F)'),
   aadhaar_number:  z.string().min(1, 'Aadhaar is required').regex(/^\d{12}$/, 'Must be 12 digits'),
   driving_license: z.string().optional().or(z.literal('')),
@@ -212,6 +213,7 @@ export default function CreateEmployeePage() {
       employment_type: 'full_time', status: 'active', country: 'India',
       basic_salary: 0, hra: 0, bonus: 0,
       allowances: [], other_deductions: 0, tds_amount: 0, pt_state: 'Telangana',
+      official_dob: '',
     },
   });
 
@@ -414,6 +416,7 @@ export default function CreateEmployeePage() {
       ...data,
       phone:   data.phone   || undefined,
       dob:     data.dob     || undefined,
+      official_dob: data.official_dob || undefined,
       address: data.address || undefined,
       city:    data.city    || undefined,
       state:   data.state   || undefined,
@@ -482,8 +485,11 @@ export default function CreateEmployeePage() {
               <option value="other">Other</option>
             </select>
           </Field>
-          <Field label="Date of Birth">
+          <Field label="Birthday">
             <Input type="date" {...register('dob')} className="h-9" />
+          </Field>
+          <Field label="Date of Birth">
+            <Input type="date" {...register('official_dob')} className="h-9" />
           </Field>
           <Field label="Blood Group">
             <select {...register('blood_group')} className={selectCls}>

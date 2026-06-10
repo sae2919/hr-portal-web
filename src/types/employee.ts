@@ -8,6 +8,7 @@ export interface Employee {
   phone: string | null;
   gender: 'male' | 'female' | 'other' | null;
   dob: string | null;
+  official_dob?: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -57,6 +58,7 @@ export interface StoreEmployeePayload {
   phone?: string;
   gender?: string;
   dob?: string;
+  official_dob?: string;
   address?: string;
   city?: string;
   state?: string;

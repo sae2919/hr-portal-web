@@ -217,7 +217,8 @@ export default function EmployeeDetailPage() {
               <DetailRow label="Phone" value={employee.phone} copyable />
               <DetailRow label="Gender" value={employee.gender} />
               <DetailRow label="Blood Group" value={employee.blood_group} />
-              <DetailRow label="Date of Birth" value={formatDate(employee.dob)} />
+              <DetailRow label="Birthday" value={formatDate(employee.dob)} />
+              {showSensitive && <DetailRow label="Date of Birth" value={formatDate(employee.official_dob)} />}
               <DetailRow label="Country" value={employee.country} />
               <DetailRow label="State" value={employee.state} />
               <DetailRow label="City" value={employee.city} />

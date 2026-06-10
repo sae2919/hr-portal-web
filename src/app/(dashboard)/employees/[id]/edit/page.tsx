@@ -142,7 +142,7 @@ export default function EditEmployeePage() {
 
   const [formData, setFormData] = useState({
     first_name: '', last_name: '', email: '', phone: '', gender: '' as '',
-    blood_group: '' as '', dob: '', address: '', city: '', state: '', country: 'India', pincode: '',
+    blood_group: '' as '', dob: '', official_dob: '', address: '', city: '', state: '', country: 'India', pincode: '',
     department_id: '' as number | '', designation_id: '' as number | '', reporting_to: '' as number | '',
     joining_date: '', exit_date: '',
     employment_type: 'full_time' as 'full_time' | 'part_time' | 'contract' | 'intern',
@@ -223,7 +223,7 @@ export default function EditEmployeePage() {
       first_name: employee.first_name || '', last_name: employee.last_name || '',
       email: employee.email || '', phone: employee.phone || '',
       gender: employee.gender || '', blood_group: employee.blood_group || '',
-      dob: employee.dob || '', address: employee.address || '',
+      dob: employee.dob || '', official_dob: employee.official_dob || '', address: employee.address || '',
       city: employee.city || '', state: employee.state || '',
       country: employee.country || 'India', pincode: employee.pincode || '',
       department_id: employee.department_id || '', designation_id: employee.designation_id || '',
@@ -665,8 +665,11 @@ export default function EditEmployeePage() {
                 {['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
               </select>
             </FormField>
-            <FormField label="Date of Birth">
+            <FormField label="Birthday">
               <Input type="date" value={formData.dob} onChange={(e) => handleChange('dob', e.target.value)} className="h-9" />
+            </FormField>
+            <FormField label="Date of Birth">
+              <Input type="date" value={formData.official_dob} onChange={(e) => handleChange('official_dob', e.target.value)} className="h-9" />
             </FormField>
             <FormField label="Country">
               <Input value={formData.country} onChange={(e) => handleChange('country', e.target.value)} className="h-9" />
