@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { useAuthStore } from '@/store/authStore';
+import api from '@/lib/api';
 import {
   Plus,
   Search,
@@ -44,6 +46,12 @@ export default function MailTemplatesPage() {
   const [body, setBody] = useState('');
   const [style, setStyle] = useState('');
   const [activeStatus, setActiveStatus] = useState(1);
+  const [pdfPath, setPdfPath] = useState<string | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfFields, setPdfFields] = useState<any[]>([]);
+  const [usePdf, setUsePdf] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
 
   // Error & validation states
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -58,6 +66,71 @@ export default function MailTemplatesPage() {
   const styleTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [activeTextarea, setActiveTextarea] = useState<'body' | 'style'>('body');
 
+  const fetchPdfPreview = async () => {
+    if (!selectedTemplate) return;
+    setLoadingPdfPreview(true);
+    try {
+      const token = useAuthStore.getState().token;
+      const response = await fetch(
+        `${api.defaults.baseURL}/mail-templates/${selectedTemplate.id}/preview-pdf`,
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+        }
+      );
+      if (!response.ok) throw new Error('Failed to load PDF preview');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setPdfPreviewUrl(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingPdfPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'preview' && usePdf && selectedTemplate && !isCreating) {
+      fetchPdfPreview();
+    } else {
+      if (pdfPreviewUrl) {
+        URL.revokeObjectURL(pdfPreviewUrl);
+        setPdfPreviewUrl(null);
+      }
+    }
+  }, [activeTab, usePdf, selectedTemplate, isCreating]);
+
+  // Manage coordinate fields
+  const handleAddField = () => {
+    setPdfFields((prev) => [
+      ...prev,
+      {
+        variable: 'candidate_name',
+        page: 1,
+        x: 40,
+        y: 80,
+        width: 100,
+        height: 8,
+        font_size: 11,
+        font_style: '',
+        color: '#000000',
+        align: 'L',
+        mask: true,
+      },
+    ]);
+  };
+
+  const handleUpdateField = (index: number, key: string, value: any) => {
+    setPdfFields((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, [key]: value } : item))
+    );
+  };
+
+  const handleRemoveField = (index: number) => {
+    setPdfFields((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
   // Load selected template into form states
   useEffect(() => {
     if (selectedTemplate && !isCreating) {
@@ -66,6 +139,10 @@ export default function MailTemplatesPage() {
       setBody(selectedTemplate.body || '');
       setStyle(selectedTemplate.style || '');
       setActiveStatus(selectedTemplate.active_status);
+      setPdfPath(selectedTemplate.pdf_path || null);
+      setPdfFields(selectedTemplate.pdf_fields || []);
+      setUsePdf(!!selectedTemplate.pdf_path);
+      setPdfFile(null);
       setValidationErrors({});
     }
   }, [selectedTemplate, isCreating]);
@@ -85,6 +162,10 @@ export default function MailTemplatesPage() {
     setTemplateName('');
     setSubject('');
     setBody('');
+    setPdfPath(null);
+    setPdfFile(null);
+    setPdfFields([]);
+    setUsePdf(false);
     
     if (templateType === 'mail') {
       setStyle(`body {
@@ -260,14 +341,25 @@ body {
   const handleSave = () => {
     if (!validateForm()) return;
 
-    const payload = {
+    const payload: any = {
       template_name: templateName,
       type: templateType,
       subject: subject,
-      body: body,
-      style: style,
       active_status: activeStatus,
     };
+
+    if (usePdf) {
+      payload.pdf_file = pdfFile;
+      payload.pdf_fields = pdfFields;
+      payload.body = '';
+      payload.style = '';
+    } else {
+      payload.body = body;
+      payload.style = style;
+      if (pdfPath) {
+        payload.delete_pdf_file = true;
+      }
+    }
 
     if (isCreating) {
       createMutation.mutate(payload, {
@@ -342,6 +434,20 @@ body {
           { label: 'Net Salary', tag: 'net_salary' },
           { label: 'Present Days', tag: 'present_days' },
           { label: 'LOP Days', tag: 'lop_days' },
+          { label: 'LOP Deduction', tag: 'lop_deduction' },
+          { label: 'Basic/Stipend', tag: 'basic_salary' },
+          { label: 'HRA', tag: 'hra' },
+          { label: 'Allowances', tag: 'allowances' },
+          { label: 'Gross Salary', tag: 'gross_salary' },
+          { label: 'Total Deductions', tag: 'total_deductions' },
+          { label: 'Net Salary in Words', tag: 'net_pay_words' },
+          { label: 'Designation', tag: 'designation' },
+          { label: 'Department', tag: 'department' },
+          { label: 'Bank Name', tag: 'bankName' },
+          { label: 'Masked Bank Account', tag: 'maskedAcc' },
+          { label: 'Masked PAN No', tag: 'maskedPan' },
+          { label: 'Joining Date', tag: 'joining_date' },
+          { label: 'Current Date', tag: 'date' },
         ];
       case 'offer_joining':
         return [
@@ -361,6 +467,8 @@ body {
           { label: 'Last Working Day', tag: 'last_working_day' },
           { label: 'Employee Code', tag: 'employee_code' },
           { label: 'Salutation (Mr/Ms)', tag: 'salutation' },
+          { label: 'Letter Date', tag: 'date' },
+          { label: 'Resignation Date', tag: 'resignation_date' },
         ];
       default:
         return [
@@ -845,72 +953,328 @@ body {
                     </div>
                   </div>
 
+                  {/* PDF Template Settings Panel */}
+                  {templateType !== 'mail' && (
+                    <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex-shrink-0 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-bold text-slate-700">Use Background PDF Template</Label>
+                          <p className="text-[10px] text-slate-400">
+                            Upload a static PDF background to overlay dynamic text instead of rendering from HTML.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={usePdf}
+                          onChange={(e) => setUsePdf(e.target.checked)}
+                          className="w-9 h-5 bg-slate-200 checked:bg-blue-600 rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:h-4 before:w-4 before:bg-white before:rounded-full before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all border border-slate-300"
+                        />
+                      </div>
+
+                      {usePdf && (
+                        <div className="border-t border-slate-100 pt-4 space-y-4 animate-in fade-in duration-200">
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              Background PDF File
+                            </Label>
+                            
+                            {pdfPath ? (
+                              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                  <span className="text-xs font-medium text-slate-700 truncate max-w-[200px]">
+                                    {pdfPath.split('/').pop()}
+                                  </span>
+                                  <a
+                                    href={`${api.defaults.baseURL?.replace('/api/v1', '')}/${pdfPath}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[10px] text-blue-600 hover:underline font-semibold"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm("Are you sure you want to remove the background PDF?")) {
+                                      setPdfPath(null);
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 text-[10px] rounded-lg px-2"
+                                >
+                                  Delete PDF
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl p-6 hover:bg-slate-50 transition-colors">
+                                <input
+                                  type="file"
+                                  accept="application/pdf"
+                                  id="pdf-upload-input"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      setPdfFile(file);
+                                      setPdfPath(file.name);
+                                    }
+                                  }}
+                                  className="hidden"
+                                />
+                                <label htmlFor="pdf-upload-input" className="flex flex-col items-center cursor-pointer space-y-2">
+                                  <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
+                                    <Plus className="w-5 h-5" />
+                                  </div>
+                                  <span className="text-xs font-semibold text-blue-600 hover:underline">
+                                    {pdfFile ? `Selected: ${pdfFile.name}` : "Click to upload background PDF"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">PDF up to 10MB</span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Placeholder tags helper widget */}
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4 flex-shrink-0 flex items-center justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <h4 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                        Dynamic Template Tags Helper
-                      </h4>
-                      <p className="text-[10px] text-blue-700/80">
-                        Select an editor textarea below, then click a tag button to insert it at your cursor.
-                      </p>
+                  {!usePdf && (
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4 flex-shrink-0 flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <h4 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                          Dynamic Template Tags Helper
+                        </h4>
+                        <p className="text-[10px] text-blue-700/80">
+                          Select an editor textarea below, then click a tag button to insert it at your cursor.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-w-[60%] justify-end">
+                        {getPlaceholderTags().map((item) => (
+                          <button
+                            key={item.tag}
+                            type="button"
+                            onClick={() => handleInsertTag(item.tag)}
+                            className="text-[9px] font-mono bg-white hover:bg-blue-600 hover:text-white border border-blue-200 text-blue-700 px-2 py-1 rounded-md transition-all font-bold shadow-sm hover:scale-105 active:scale-95"
+                            title={`Click to insert {{${item.tag}}}`}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 max-w-[60%] justify-end">
-                      {getPlaceholderTags().map((item) => (
-                        <button
-                          key={item.tag}
+                  )}
+
+                  {!usePdf ? (
+                    /* HTML Body and CSS Style Editors split */
+                    <div className="flex-1 grid grid-cols-2 gap-6 min-h-[350px]">
+                      {/* HTML Body Area */}
+                      <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm h-full">
+                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
+                          <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                            <Code className="w-3.5 h-3.5 text-blue-600" />
+                            Document Content (HTML Body)
+                          </span>
+                          <Badge variant="secondary" className="font-mono text-[9px] rounded px-1.5 py-0">HTML</Badge>
+                        </div>
+                        <textarea
+                          ref={bodyTextareaRef}
+                          onFocus={() => setActiveTextarea('body')}
+                          value={body}
+                          onChange={(e) => setBody(e.target.value)}
+                          placeholder="Write your document HTML layout here..."
+                          className="flex-1 p-4 font-mono text-[11px] text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
+                        />
+                      </div>
+
+                      {/* CSS Style Area */}
+                      <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm h-full">
+                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
+                          <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                            <Code className="w-3.5 h-3.5 text-indigo-600" />
+                            Document Styling (CSS Stylesheet)
+                          </span>
+                          <Badge variant="secondary" className="font-mono text-[9px] rounded px-1.5 py-0">CSS</Badge>
+                        </div>
+                        <textarea
+                          ref={styleTextareaRef}
+                          onFocus={() => setActiveTextarea('style')}
+                          value={style}
+                          onChange={(e) => setStyle(e.target.value)}
+                          placeholder="Define your CSS stylesheet rules..."
+                          className="flex-1 p-4 font-mono text-[11px] text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    /* PDF Coordinates Editor */
+                    <div className="flex-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4 overflow-y-auto min-h-[350px]">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div>
+                          <Label className="text-xs font-bold text-slate-700">Field Placement Coordinates</Label>
+                          <p className="text-[10px] text-slate-400">
+                            Position placeholder tags precisely on the PDF background (coordinates are in millimeters from top-left).
+                          </p>
+                        </div>
+                        <Button
                           type="button"
-                          onClick={() => handleInsertTag(item.tag)}
-                          className="text-[9px] font-mono bg-white hover:bg-blue-600 hover:text-white border border-blue-200 text-blue-700 px-2 py-1 rounded-md transition-all font-bold shadow-sm hover:scale-105 active:scale-95"
-                          title={`Click to insert {{${item.tag}}}`}
+                          onClick={handleAddField}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl h-8 px-3 text-[10px] flex items-center gap-1 font-semibold"
                         >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* HTML Body and CSS Style Editors split */}
-                  <div className="flex-1 grid grid-cols-2 gap-6 min-h-[350px]">
-                    {/* HTML Body Area */}
-                    <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm h-full">
-                      <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
-                        <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                          <Code className="w-3.5 h-3.5 text-blue-600" />
-                          Document Content (HTML Body)
-                        </span>
-                        <Badge variant="secondary" className="font-mono text-[9px] rounded px-1.5 py-0">HTML</Badge>
+                          <Plus className="w-3.5 h-3.5" /> Add Field
+                        </Button>
                       </div>
-                      <textarea
-                        ref={bodyTextareaRef}
-                        onFocus={() => setActiveTextarea('body')}
-                        value={body}
-                        onChange={(e) => setBody(e.target.value)}
-                        placeholder="Write your document HTML layout here..."
-                        className="flex-1 p-4 font-mono text-[11px] text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
-                      />
-                    </div>
 
-                    {/* CSS Style Area */}
-                    <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm h-full">
-                      <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
-                        <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                          <Code className="w-3.5 h-3.5 text-indigo-600" />
-                          Document Styling (CSS Stylesheet)
-                        </span>
-                        <Badge variant="secondary" className="font-mono text-[9px] rounded px-1.5 py-0">CSS</Badge>
-                      </div>
-                      <textarea
-                        ref={styleTextareaRef}
-                        onFocus={() => setActiveTextarea('style')}
-                        value={style}
-                        onChange={(e) => setStyle(e.target.value)}
-                        placeholder="Define your CSS stylesheet rules..."
-                        className="flex-1 p-4 font-mono text-[11px] text-slate-700 bg-slate-900/5 focus:bg-white focus:outline-none resize-none overflow-y-auto leading-relaxed border-0"
-                      />
+                      {pdfFields.length === 0 ? (
+                        <div className="p-8 text-center border border-dashed border-slate-200 rounded-xl text-slate-400 text-[11px]">
+                          No fields mapped yet. Click "Add Field" to begin positioning variables.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-slate-600 text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[9px]">
+                                <th className="py-2.5 px-3">Variable / Tag</th>
+                                <th className="py-2.5 px-2 w-16 text-center">Page</th>
+                                <th className="py-2.5 px-2 w-20 text-center">X (mm)</th>
+                                <th className="py-2.5 px-2 w-20 text-center">Y (mm)</th>
+                                <th className="py-2.5 px-2 w-20 text-center">W (mm)</th>
+                                <th className="py-2.5 px-2 w-20 text-center">H (mm)</th>
+                                <th className="py-2.5 px-2 w-16 text-center">Size (pt)</th>
+                                <th className="py-2.5 px-2 w-24 text-center">Style</th>
+                                <th className="py-2.5 px-2 w-24 text-center">Align</th>
+                                <th className="py-2.5 px-2 w-16 text-center">Mask?</th>
+                                <th className="py-2.5 px-3 w-12 text-center"></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {pdfFields.map((field, index) => (
+                                <tr key={index} className="hover:bg-slate-50/50">
+                                  <td className="py-2 px-3">
+                                    <select
+                                      value={field.variable}
+                                      onChange={(e) => handleUpdateField(index, 'variable', e.target.value)}
+                                      className="w-full h-8 text-[11px] rounded-lg border border-slate-200 bg-white px-2 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                    >
+                                      <option value="">Custom text / custom tag...</option>
+                                      {getPlaceholderTags().map((tag) => (
+                                        <option key={tag.tag} value={`{{${tag.tag}}}`}>
+                                          {tag.label} ({"{{" + tag.tag + "}}"})
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {!getPlaceholderTags().some(t => `{{${t.tag}}}` === field.variable) && (
+                                      <Input
+                                        value={field.variable}
+                                        onChange={(e) => handleUpdateField(index, 'variable', e.target.value)}
+                                        placeholder="e.g. {{my_custom_tag}}"
+                                        className="h-8 text-[10px] mt-1 border-slate-200"
+                                      />
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={field.page}
+                                      onChange={(e) => handleUpdateField(index, 'page', parseInt(e.target.value) || 1)}
+                                      className="w-full h-8 text-[11px] text-center rounded-lg border border-slate-200"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={field.x}
+                                      onChange={(e) => handleUpdateField(index, 'x', parseFloat(e.target.value) || 0)}
+                                      className="w-full h-8 text-[11px] text-center rounded-lg border border-slate-200"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={field.y}
+                                      onChange={(e) => handleUpdateField(index, 'y', parseFloat(e.target.value) || 0)}
+                                      className="w-full h-8 text-[11px] text-center rounded-lg border border-slate-200"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={field.width}
+                                      onChange={(e) => handleUpdateField(index, 'width', parseFloat(e.target.value) || 0)}
+                                      className="w-full h-8 text-[11px] text-center rounded-lg border border-slate-200"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={field.height}
+                                      onChange={(e) => handleUpdateField(index, 'height', parseFloat(e.target.value) || 0)}
+                                      className="w-full h-8 text-[11px] text-center rounded-lg border border-slate-200"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="number"
+                                      value={field.font_size}
+                                      onChange={(e) => handleUpdateField(index, 'font_size', parseInt(e.target.value) || 11)}
+                                      className="w-full h-8 text-[11px] text-center rounded-lg border border-slate-200"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <select
+                                      value={field.font_style || ''}
+                                      onChange={(e) => handleUpdateField(index, 'font_style', e.target.value)}
+                                      className="w-full h-8 text-[11px] rounded-lg border border-slate-200 bg-white"
+                                    >
+                                      <option value="">Regular</option>
+                                      <option value="B">Bold</option>
+                                      <option value="I">Italic</option>
+                                      <option value="BI">Bold Italic</option>
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <select
+                                      value={field.align || 'L'}
+                                      onChange={(e) => handleUpdateField(index, 'align', e.target.value)}
+                                      className="w-full h-8 text-[11px] rounded-lg border border-slate-200 bg-white"
+                                    >
+                                      <option value="L">Left</option>
+                                      <option value="C">Center</option>
+                                      <option value="R">Right</option>
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!field.mask}
+                                      onChange={(e) => handleUpdateField(index, 'mask', e.target.checked)}
+                                      className="w-4 h-4 text-blue-600 rounded border-slate-300"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveField(index)}
+                                      className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 /* Tab: Live Sandbox Preview */
@@ -940,14 +1304,33 @@ body {
                   )}
 
                   {/* Sandboxed iframe content area */}
-                  <div className="flex-1 p-4 bg-slate-100/50 flex items-center justify-center overflow-hidden">
+                  <div className="flex-1 p-4 bg-slate-100/50 flex items-center justify-center overflow-hidden h-full">
                     <div className="w-full h-full max-w-4xl bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col">
-                      <iframe
-                        srcDoc={renderPreview()}
-                        className="w-full h-full border-none bg-white"
-                        title="Isolated Sandbox Document Preview"
-                        sandbox="allow-same-origin"
-                      />
+                      {usePdf ? (
+                        loadingPdfPreview ? (
+                          <div className="flex-1 flex flex-col items-center justify-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                            <p className="text-xs text-slate-400 mt-2 font-medium">Generating PDF preview...</p>
+                          </div>
+                        ) : pdfPreviewUrl ? (
+                          <iframe
+                            src={pdfPreviewUrl}
+                            className="w-full h-full border-none bg-white"
+                            title="Dynamic PDF Preview"
+                          />
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 text-xs">
+                            Please save your changes to generate a live PDF preview.
+                          </div>
+                        )
+                      ) : (
+                        <iframe
+                          srcDoc={renderPreview()}
+                          className="w-full h-full border-none bg-white"
+                          title="Isolated Sandbox Document Preview"
+                          sandbox="allow-same-origin"
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
